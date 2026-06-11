@@ -77,9 +77,20 @@ function parsePriorSessionLevels(briefText) {
     if (!line.includes(" | 週偏見")) continue;
 
     const symbol = line.split("|")[0].trim();
-    const levelLine = (lines[i + 3] || "").trim();
-    const segments = levelLine.split(" | ").map((s) => s.trim());
+    let levelLine = "";
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const candidate = lines[j].trim();
+      if (!candidate) continue;
+      if (/^\S+\s+\|\s+週偏見/.test(candidate)) break;
+      if (/^PD\s+/i.test(candidate) && candidate.includes(" | ")) {
+        levelLine = candidate;
+        break;
+      }
+    }
 
+    if (!levelLine) continue;
+
+    const segments = levelLine.split(" | ").map((s) => s.trim());
     if (segments.length < 4) continue;
 
     const parsed = {};
@@ -124,11 +135,13 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
     indicatorMap.AI_WEEKLY_BIAS,
     indicatorMap.AI_DAILY_BIAS,
   );
+  const yesterdayNote = "註：PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
   return [
     `${item.symbol} | 週偏見${weekly} | 日偏見${daily} | ${aligned ? "方向一致" : "方向不一致"}`,
     `時間 ${new Date(generatedAt).toLocaleString("en-GB", { timeZone: "Australia/Brisbane" })} Brisbane`,
     fakeout,
+    yesterdayNote,
     reminder,
     `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
       `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +
@@ -165,6 +178,7 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
       indicatorMap.AI_WEEKLY_BIAS,
       indicatorMap.AI_DAILY_BIAS,
     );
+    const yesterdayNote = "註：PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
     rows.push(
       [
@@ -177,6 +191,7 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
         .join(" | "),
     );
     rows.push(fakeout);
+    rows.push(yesterdayNote);
     rows.push(reminder);
     rows.push(
       `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
