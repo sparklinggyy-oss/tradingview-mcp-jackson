@@ -30,6 +30,24 @@ function loadRulesPath() {
   return resolve(PROJECT_ROOT, "rules.json");
 }
 
+function loadTargetDate() {
+  const argIndex = process.argv.findIndex(
+    (arg) => arg === "--date" || arg === "-d",
+  );
+  if (argIndex >= 0 && process.argv[argIndex + 1]) {
+    const date = process.argv[argIndex + 1];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error(`Invalid --date value: ${date}. Use YYYY-MM-DD.`);
+    }
+    return date;
+  }
+  return null;
+}
+
+function hasFlag(flag) {
+  return process.argv.some((arg) => arg === flag);
+}
+
 function isFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v);
 }
@@ -47,6 +65,19 @@ function previousDateString(reference = new Date()) {
   const utc = new Date(Date.UTC(year, month - 1, day));
   utc.setUTCDate(utc.getUTCDate() - 1);
   return utc.toISOString().slice(0, 10);
+}
+
+function dateToBrisbaneString(date) {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(date));
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return `${year}-${month}-${day}`;
 }
 
 function parseLevelSegment(segment) {
@@ -246,34 +277,40 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
 
 async function main() {
   const rulesPath = loadRulesPath();
+  const captureOnly = hasFlag("--capture-only");
+  const targetDate = loadTargetDate() || dateToBrisbaneString(new Date());
   const brief = await runBrief({ rules_path: rulesPath });
-  const priorSession = getSession({ date: previousDateString(new Date(brief.generated_at)) });
+  const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
   const snapshot = buildSnapshotBySymbol(brief);
 
   const telegram = getTelegramConfigForKind(process.env, "morning");
 
-  if (!telegram.enabled) {
+  if (!telegram.enabled && !captureOnly) {
     console.error("Telegram config missing. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS (or TELEGRAM_CHAT_ID).");
     console.log(formatBrief(brief));
     process.exit(1);
   }
 
   const sent = [];
-  for (const item of brief.symbols_scanned || []) {
-    const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol);
-    const result = await sendTelegramBroadcast({
-      botToken: telegram.botToken,
-      chatIds: telegram.chatIds,
-      text,
-    });
-    sent.push({ symbol: item.symbol, sent_to: result.sent_to });
+  if (!captureOnly) {
+    for (const item of brief.symbols_scanned || []) {
+      const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol);
+      const result = await sendTelegramBroadcast({
+        botToken: telegram.botToken,
+        chatIds: telegram.chatIds,
+        text,
+      });
+      sent.push({ symbol: item.symbol, sent_to: result.sent_to });
+    }
   }
 
-  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol), snapshot });
+  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol), snapshot, date: targetDate });
 
   console.log(JSON.stringify({
     success: true,
+    capture_only: captureOnly,
+    session_date: targetDate,
     sent_to: sent,
     rules_path: rulesPath,
   }, null, 2));
