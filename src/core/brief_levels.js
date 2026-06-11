@@ -132,11 +132,11 @@ export function summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias) 
 
   const candidates = [];
   if (longBias) {
-    for (const [label, level] of [["PD", levels.pd.val], ["2D", levels.d2.val], ["PW", levels.pw.val], ["2W", levels.w2.val]]) {
+    for (const [label, level] of [["CUR", levels.cur.val], ["PD", levels.pd.val], ["2D", levels.d2.val], ["PW", levels.pw.val], ["2W", levels.w2.val]]) {
       if (session.bars.some((bar) => touchedAndReclaimed(bar, level, "val"))) candidates.push(`${label} VAL`);
     }
   } else if (shortBias) {
-    for (const [label, level] of [["PD", levels.pd.vah], ["2D", levels.d2.vah], ["PW", levels.pw.vah], ["2W", levels.w2.vah]]) {
+    for (const [label, level] of [["CUR", levels.cur.vah], ["PD", levels.pd.vah], ["2D", levels.d2.vah], ["PW", levels.pw.vah], ["2W", levels.w2.vah]]) {
       if (session.bars.some((bar) => touchedAndReclaimed(bar, level, "vah"))) candidates.push(`${label} VAH`);
     }
   }

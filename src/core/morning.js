@@ -270,7 +270,7 @@ export async function runBrief({ rules_path } = {}) {
   }, { name: "morning-brief", waitMs: 10 * 60 * 1000 });
 }
 
-export function saveSession({ brief, date } = {}) {
+export function saveSession({ brief, snapshot, date } = {}) {
   const dateStr = date || new Date().toISOString().split("T")[0];
   assertSafeDate(dateStr);
   mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -284,6 +284,7 @@ export function saveSession({ brief, date } = {}) {
     date: dateStr,
     saved_at: new Date().toISOString(),
     brief,
+    snapshot: snapshot ?? existing.snapshot ?? null,
   };
 
   writeFileSync(filePath, JSON.stringify(record, null, 2));

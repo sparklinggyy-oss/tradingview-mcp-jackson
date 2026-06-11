@@ -112,6 +112,37 @@ function parsePriorSessionLevels(briefText) {
   return map;
 }
 
+function buildSnapshotBySymbol(brief) {
+  const snapshot = { generated_at: brief.generated_at, symbols: {} };
+  for (const item of brief.symbols_scanned || []) {
+    if (item.error) continue;
+    const indicators = item.indicators || {};
+    const indicatorMap = getStudyValuesMap(indicators);
+    snapshot.symbols[item.symbol] = {
+      levels: detectLevels(indicators),
+      weeklyBiasRaw: indicatorMap.AI_WEEKLY_BIAS ?? null,
+      dailyBiasRaw: indicatorMap.AI_DAILY_BIAS ?? null,
+      weeklyBias: biasWord(indicatorMap.AI_WEEKLY_BIAS),
+      dailyBias: biasWord(indicatorMap.AI_DAILY_BIAS),
+      generated_at: brief.generated_at,
+    };
+  }
+  return snapshot;
+}
+
+function levelsBySymbolFromSession(session) {
+  const snapshot = session?.snapshot;
+  const symbols = snapshot?.symbols && typeof snapshot.symbols === "object" ? snapshot.symbols : null;
+  if (symbols) {
+    const map = {};
+    for (const [symbol, entry] of Object.entries(symbols)) {
+      if (entry?.levels) map[symbol] = entry.levels;
+    }
+    return map;
+  }
+  return parsePriorSessionLevels(session?.brief || "");
+}
+
 function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
   if (item.error) {
     return `${item.symbol} | ERROR: ${item.error}`;
@@ -135,7 +166,7 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
     indicatorMap.AI_WEEKLY_BIAS,
     indicatorMap.AI_DAILY_BIAS,
   );
-  const yesterdayNote = "註：PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
+  const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
   return [
     `${item.symbol} | 週偏見${weekly} | 日偏見${daily} | ${aligned ? "方向一致" : "方向不一致"}`,
@@ -178,7 +209,7 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
       indicatorMap.AI_WEEKLY_BIAS,
       indicatorMap.AI_DAILY_BIAS,
     );
-    const yesterdayNote = "註：PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
+    const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
     rows.push(
       [
@@ -208,7 +239,8 @@ async function main() {
   const rulesPath = loadRulesPath();
   const brief = await runBrief({ rules_path: rulesPath });
   const priorSession = getSession({ date: previousDateString(new Date(brief.generated_at)) });
-  const priorLevelsBySymbol = parsePriorSessionLevels(priorSession?.brief || "");
+  const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
+  const snapshot = buildSnapshotBySymbol(brief);
 
   const telegram = getTelegramConfigForKind(process.env, "morning");
 
@@ -229,7 +261,7 @@ async function main() {
     sent.push({ symbol: item.symbol, sent_to: result.sent_to });
   }
 
-  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol) });
+  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol), snapshot });
 
   console.log(JSON.stringify({
     success: true,
