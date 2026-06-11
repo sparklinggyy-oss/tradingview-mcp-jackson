@@ -97,7 +97,7 @@
         "conditions": [
           "Weekly bias is bullish.",
           "Daily bias is bullish.",
-          "Price fakeouts previous day's VAL, two days ago VAL, previous week's VAL, or two weeks ago VAL, and a red absorption bubble appears."
+          "Price fakeouts current developing VAL, previous day's VAL, two days ago VAL, previous week's VAL, or two weeks ago VAL, and a red absorption bubble appears."
         ]
       },
       {
@@ -124,7 +124,7 @@
         "conditions": [
           "Weekly bias is bearish.",
           "Daily bias is bearish.",
-          "Price fakeouts previous day's VAH, two days ago VAH, previous week's VAH, or two weeks ago VAH, and a green absorption bubble appears."
+          "Price fakeouts current developing VAH, previous day's VAH, two days ago VAH, previous week's VAH, or two weeks ago VAH, and a green absorption bubble appears."
         ]
       },
       {
