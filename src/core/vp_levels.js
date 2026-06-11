@@ -1,30 +1,8 @@
+import { getStudyValuesMap } from "./study_values.js";
+export { getStudyValuesMap } from "./study_values.js";
+
 function textOf(value) {
   return value === null || value === undefined ? "" : String(value);
-}
-
-export function getStudyValuesMap(indicators) {
-  const map = {};
-  const seen = new Set();
-
-  function walk(node) {
-    if (!node || typeof node !== "object" || seen.has(node)) return;
-    seen.add(node);
-
-    if (Array.isArray(node)) {
-      for (const item of node) walk(item);
-      return;
-    }
-
-    for (const [key, value] of Object.entries(node)) {
-      if (key.startsWith("AI_") || key === "Up" || key === "Down" || key === "Total") {
-        map[key] = value;
-      }
-      if (value && typeof value === "object") walk(value);
-    }
-  }
-
-  walk(indicators);
-  return map;
 }
 
 export function toNum(v) {

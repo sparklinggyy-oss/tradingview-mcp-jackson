@@ -3,7 +3,7 @@
 import "dotenv/config";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runBrief, saveSession } from "../src/core/morning.js";
+import { getSession, runBrief, saveSession } from "../src/core/morning.js";
 import {
   biasWord,
   detectLevels,
@@ -34,7 +34,74 @@ function isFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v);
 }
 
-function formatSymbolBrief(item, generatedAt) {
+function previousDateString(reference = new Date()) {
+  const d = new Date(reference);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().split("T")[0];
+}
+
+function parseLevelSegment(segment) {
+  const match = String(segment || "").trim().match(/^(PD|2D|PW|2W)\s+(.+)$/i);
+  if (!match) return null;
+  const label = match[1].toUpperCase();
+  const values = match[2].split("/").map((s) => s.trim());
+  if (values.length !== 3) return null;
+
+  const keyMap = {
+    PD: "pd",
+    "2D": "d2",
+    PW: "pw",
+    "2W": "w2",
+  };
+
+  const key = keyMap[label];
+  if (!key) return null;
+
+  return {
+    key,
+    value: {
+      poc: values[0],
+      vah: values[1],
+      val: values[2],
+    },
+  };
+}
+
+function parsePriorSessionLevels(briefText) {
+  const map = {};
+  const lines = String(briefText || "").split(/\r?\n/);
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith("Morning brief")) continue;
+    if (!line.includes(" | 週偏見")) continue;
+
+    const symbol = line.split("|")[0].trim();
+    const levelLine = (lines[i + 3] || "").trim();
+    const segments = levelLine.split(" | ").map((s) => s.trim());
+
+    if (segments.length < 4) continue;
+
+    const parsed = {};
+    let ok = true;
+    for (const segment of segments.slice(0, 4)) {
+      const item = parseLevelSegment(segment);
+      if (!item) {
+        ok = false;
+        break;
+      }
+      parsed[item.key] = item.value;
+    }
+
+    if (ok && symbol) {
+      map[symbol] = parsed;
+    }
+  }
+
+  return map;
+}
+
+function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
   if (item.error) {
     return `${item.symbol} | ERROR: ${item.error}`;
   }
@@ -48,7 +115,7 @@ function formatSymbolBrief(item, generatedAt) {
   const bars = item.ohlcv?.bars || [];
   const fakeout = summarizeYesterdayFakeouts(
     bars,
-    levels,
+    priorLevelsBySymbol[item.symbol] || levels,
     indicatorMap.AI_DAILY_BIAS,
     indicatorMap.AI_WEEKLY_BIAS,
   );
@@ -70,7 +137,7 @@ function formatSymbolBrief(item, generatedAt) {
   ].join("\n");
 }
 
-function formatBrief(result) {
+function formatBrief(result, priorLevelsBySymbol = {}) {
   const rows = [];
   rows.push(`Morning brief ${new Date(result.generated_at).toLocaleString("en-GB", { timeZone: "Australia/Brisbane" })} Brisbane`);
 
@@ -89,7 +156,7 @@ function formatBrief(result) {
     const bars = item.ohlcv?.bars || [];
     const fakeout = summarizeYesterdayFakeouts(
       bars,
-      levels,
+      priorLevelsBySymbol[item.symbol] || levels,
       indicatorMap.AI_DAILY_BIAS,
       indicatorMap.AI_WEEKLY_BIAS,
     );
@@ -125,6 +192,8 @@ function formatBrief(result) {
 async function main() {
   const rulesPath = loadRulesPath();
   const brief = await runBrief({ rules_path: rulesPath });
+  const priorSession = getSession({ date: previousDateString(new Date(brief.generated_at)) });
+  const priorLevelsBySymbol = parsePriorSessionLevels(priorSession?.brief || "");
 
   const telegram = getTelegramConfigForKind(process.env, "morning");
 
@@ -136,7 +205,7 @@ async function main() {
 
   const sent = [];
   for (const item of brief.symbols_scanned || []) {
-    const text = formatSymbolBrief(item, brief.generated_at);
+    const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol);
     const result = await sendTelegramBroadcast({
       botToken: telegram.botToken,
       chatIds: telegram.chatIds,
@@ -145,7 +214,7 @@ async function main() {
     sent.push({ symbol: item.symbol, sent_to: result.sent_to });
   }
 
-  await saveSession({ brief: formatBrief(brief) });
+  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol) });
 
   console.log(JSON.stringify({
     success: true,

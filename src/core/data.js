@@ -348,7 +348,7 @@ export async function getStudyValues() {
               }
             }
           } catch(e) {}
-          if (Object.keys(values).length > 0) results.push({ name: name, values: values });
+          if (Object.keys(values).length > 0) results.push({ id: s.id || null, name: name, values: values });
         } catch(e) {}
       }
       return results;
