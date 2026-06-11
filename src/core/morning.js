@@ -213,7 +213,7 @@ export async function runBrief({ rules_path } = {}) {
           chart.getState(),
           data.getStudyValues(),
           data.getQuote({}),
-          data.getOhlcv({ count: 120 }),
+          data.getOhlcv({ count: 500 }),
         ]);
 
         const normalizedSymbol = state?.symbol || symbol;

@@ -9,7 +9,8 @@ import {
   detectLevels,
   formatPrice,
   getStudyValuesMap,
-  summarizeFakeouts,
+  getTodayReminder,
+  summarizeYesterdayFakeouts,
 } from "../src/core/brief_levels.js";
 import {
   getTelegramConfigForKind,
@@ -44,21 +45,24 @@ function formatSymbolBrief(item, generatedAt) {
   const daily = biasWord(indicatorMap.AI_DAILY_BIAS);
   const weekly = biasWord(indicatorMap.AI_WEEKLY_BIAS);
   const aligned = daily === weekly && daily !== "中性";
-  const q = item.quote || {};
-  const price = isFiniteNumber(q.last) ? q.last : isFiniteNumber(q.close) ? q.close : null;
-  const fakeout = summarizeFakeouts(
-    item.symbol,
-    item.quote,
-    item.ohlcv?.bars || [],
+  const bars = item.ohlcv?.bars || [];
+  const fakeout = summarizeYesterdayFakeouts(
+    bars,
     levels,
     indicatorMap.AI_DAILY_BIAS,
     indicatorMap.AI_WEEKLY_BIAS,
   );
+  const reminder = getTodayReminder(
+    levels,
+    indicatorMap.AI_WEEKLY_BIAS,
+    indicatorMap.AI_DAILY_BIAS,
+  );
 
   return [
-    `${item.symbol} | 週偏見${weekly} | 日偏見${daily} | ${aligned ? "方向一致" : "方向不一致"}${price === null ? "" : ` | 現價 ${formatPrice(price)}`}`,
+    `${item.symbol} | 週偏見${weekly} | 日偏見${daily} | ${aligned ? "方向一致" : "方向不一致"}`,
     `時間 ${new Date(generatedAt).toLocaleString("en-GB", { timeZone: "Australia/Brisbane" })} Brisbane`,
     fakeout,
+    reminder,
     `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
       `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +
       `PW ${formatPrice(levels.pw.poc)}/${formatPrice(levels.pw.vah)}/${formatPrice(levels.pw.val)} | ` +
@@ -82,15 +86,17 @@ function formatBrief(result) {
     const daily = biasWord(indicatorMap.AI_DAILY_BIAS);
     const weekly = biasWord(indicatorMap.AI_WEEKLY_BIAS);
     const aligned = daily === weekly && daily !== "中性";
-    const q = item.quote || {};
-    const price = isFiniteNumber(q.last) ? q.last : isFiniteNumber(q.close) ? q.close : null;
-    const fakeout = summarizeFakeouts(
-      item.symbol,
-      item.quote,
-      item.ohlcv?.bars || [],
+    const bars = item.ohlcv?.bars || [];
+    const fakeout = summarizeYesterdayFakeouts(
+      bars,
       levels,
       indicatorMap.AI_DAILY_BIAS,
       indicatorMap.AI_WEEKLY_BIAS,
+    );
+    const reminder = getTodayReminder(
+      levels,
+      indicatorMap.AI_WEEKLY_BIAS,
+      indicatorMap.AI_DAILY_BIAS,
     );
 
     rows.push(
@@ -99,12 +105,12 @@ function formatBrief(result) {
         `週偏見${weekly}`,
         `日偏見${daily}`,
         aligned ? "方向一致" : "方向不一致",
-        price === null ? null : `現價 ${formatPrice(price)}`,
       ]
         .filter(Boolean)
         .join(" | "),
     );
     rows.push(fakeout);
+    rows.push(reminder);
     rows.push(
       `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
         `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +

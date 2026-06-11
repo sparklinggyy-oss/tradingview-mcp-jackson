@@ -2,6 +2,13 @@ function textOf(value) {
   return value === null || value === undefined ? "" : String(value);
 }
 
+const BRISBANE_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Australia/Brisbane",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 export function getStudyValuesMap(indicators) {
   const map = {};
   const seen = new Set();
@@ -108,37 +115,86 @@ export function touchedAndReclaimed(bar, level, mode) {
   return false;
 }
 
-export function summarizeFakeouts(symbol, quote, bars, levels, dailyBias, weeklyBias) {
-  const latest = bars?.slice?.(-2) || [];
-  const prev = latest[latest.length - 1] || null;
-  const { daily, weekly, aligned } = sideForBias(dailyBias, weeklyBias);
+function barTimeKey(time) {
+  const n = toNum(time);
+  if (n === null) return null;
+  const ms = n < 1e12 ? n * 1000 : n;
+  if (!Number.isFinite(ms)) return null;
+  return BRISBANE_DATE_FMT.format(new Date(ms));
+}
+
+export function getYesterdaySessionBars(bars) {
+  const grouped = new Map();
+  for (const bar of Array.isArray(bars) ? bars : []) {
+    const key = barTimeKey(bar?.time);
+    if (!key) continue;
+    const list = grouped.get(key) || [];
+    list.push(bar);
+    grouped.set(key, list);
+  }
+
+  const keys = [...grouped.keys()].sort();
+  if (!keys.length) {
+    return { sessionKey: null, bars: [], sessionKeys: [] };
+  }
+
+  const sessionKey = keys.length >= 2 ? keys[keys.length - 2] : keys[keys.length - 1];
+  return {
+    sessionKey,
+    bars: grouped.get(sessionKey) || [],
+    sessionKeys: keys,
+  };
+}
+
+export function summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias) {
+  const { daily } = sideForBias(dailyBias, weeklyBias);
   const longBias = daily === "多頭";
   const shortBias = daily === "空頭";
+  const session = getYesterdaySessionBars(bars);
 
   const candidates = [];
   if (longBias) {
     for (const [label, level] of [["PD", levels.pd.val], ["2D", levels.d2.val], ["PW", levels.pw.val], ["2W", levels.w2.val]]) {
-      if (touchedAndReclaimed(prev, level, "val")) candidates.push(`${label} VAL`);
+      if (session.bars.some((bar) => touchedAndReclaimed(bar, level, "val"))) candidates.push(`${label} VAL`);
     }
   } else if (shortBias) {
     for (const [label, level] of [["PD", levels.pd.vah], ["2D", levels.d2.vah], ["PW", levels.pw.vah], ["2W", levels.w2.vah]]) {
-      if (touchedAndReclaimed(prev, level, "vah")) candidates.push(`${label} VAH`);
+      if (session.bars.some((bar) => touchedAndReclaimed(bar, level, "vah"))) candidates.push(`${label} VAH`);
     }
   }
 
-  const lines = [];
-  if (candidates.length > 0) {
-    const side = longBias ? "多單" : "空單";
-    lines.push(`昨日已出現 ${candidates.join(" / ")} fakeout，請人工盯盤尋找${side}機會。`);
-  } else {
-    lines.push("昨日未見明確 fakeout 或未回收 value area，暫時不追單。");
+  const unique = [...new Set(candidates)];
+  if (unique.length > 0) {
+    return `昨日已 fakeout：${unique.join(" / ")}`;
   }
+  return "昨日未見明確 fakeout";
+}
 
+export function getTodayReminder(levels, weeklyBias, dailyBias) {
+  const daily = biasWord(dailyBias);
+  const weekly = biasWord(weeklyBias);
+
+  if (weekly === "多頭" && daily === "多頭") {
+    return `今日提醒：日內短多盯 current VAL；周極點多盯 PD/2D/PW/2W VAL`;
+  }
+  if (weekly === "空頭" && daily === "空頭") {
+    return `今日提醒：日內短空盯 current VAH；周極點空盯 PD/2D/PW/2W VAH`;
+  }
+  if (weekly === "多頭" && daily === "空頭") {
+    return `今日提醒：日內短空盯 current VAH；周極點多盯 PD/2D/PW/2W VAL`;
+  }
+  if (weekly === "空頭" && daily === "多頭") {
+    return `今日提醒：日內短多盯 current VAL；周極點空盯 PD/2D/PW/2W VAH`;
+  }
+  return `今日提醒：先觀察 current VAH / VAL；等待週日偏見明確後再決定方向`;
+}
+
+export function summarizeFakeouts(symbol, quote, bars, levels, dailyBias, weeklyBias) {
+  const { daily, weekly, aligned } = sideForBias(dailyBias, weeklyBias);
   const q = quote || {};
   const lastPrice = toNum(q.last) ?? toNum(q.close);
   const priceLine = lastPrice === null ? "" : `現價 ${formatPrice(lastPrice)}，`;
-
-  return `${symbol}\n週偏見${weekly} / 日偏見${daily}${aligned ? "，方向一致" : "，方向不一致"}\n${priceLine}${lines.join(" ")}`;
+  return `${symbol}\n週偏見${weekly} / 日偏見${daily}${aligned ? "，方向一致" : "，方向不一致"}\n${priceLine}${summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias)}`;
 }
 
 export function getAlertPlan(levels, weeklyBias, dailyBias) {
