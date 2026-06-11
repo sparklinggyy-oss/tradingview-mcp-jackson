@@ -25,6 +25,34 @@ const REQUIRED_STUDIES = String(
   .filter(Boolean);
 const RECOVERY_LAYOUT = process.env.TV_RECOVERY_LAYOUT?.trim() || "AI VP盯盤＋訊號版面";
 
+function brisbaneDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(date));
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  return `${year}-${month}-${day}`;
+}
+
+function previousBrisbaneDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(date));
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  utc.setUTCDate(utc.getUTCDate() - 1);
+  return utc.toISOString().slice(0, 10);
+}
+
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
   const start = Date.now();
   let stableCount = 0;
@@ -271,7 +299,7 @@ export async function runBrief({ rules_path } = {}) {
 }
 
 export function saveSession({ brief, snapshot, date } = {}) {
-  const dateStr = date || new Date().toISOString().split("T")[0];
+  const dateStr = date || brisbaneDateString(new Date());
   assertSafeDate(dateStr);
   mkdirSync(SESSIONS_DIR, { recursive: true });
   const filePath = join(SESSIONS_DIR, `${dateStr}.json`);
@@ -292,7 +320,7 @@ export function saveSession({ brief, snapshot, date } = {}) {
 }
 
 export function getSession({ date } = {}) {
-  const dateStr = date || new Date().toISOString().split("T")[0];
+  const dateStr = date || brisbaneDateString(new Date());
   assertSafeDate(dateStr);
   const filePath = join(SESSIONS_DIR, `${dateStr}.json`);
 
@@ -301,9 +329,7 @@ export function getSession({ date } = {}) {
   }
 
   // Fall back to yesterday
-  const yesterday = new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split("T")[0];
+  const yesterdayStr = previousBrisbaneDateString(new Date());
   const yesterdayPath = join(SESSIONS_DIR, `${yesterdayStr}.json`);
 
   if (existsSync(yesterdayPath)) {

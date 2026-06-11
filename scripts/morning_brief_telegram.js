@@ -35,9 +35,18 @@ function isFiniteNumber(v) {
 }
 
 function previousDateString(reference = new Date()) {
-  const d = new Date(reference);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().split("T")[0];
+  const parts = new Intl.DateTimeFormat("en-AU", {
+    timeZone: "Australia/Brisbane",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(reference));
+  const year = Number(parts.find((p) => p.type === "year")?.value);
+  const month = Number(parts.find((p) => p.type === "month")?.value);
+  const day = Number(parts.find((p) => p.type === "day")?.value);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  utc.setUTCDate(utc.getUTCDate() - 1);
+  return utc.toISOString().slice(0, 10);
 }
 
 function parseLevelSegment(segment) {
