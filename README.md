@@ -22,6 +22,10 @@ Built on top of the original [tradingview-mcp](https://github.com/tradesdontlie/
 | `morning_brief` | One command that scans your watchlist, reads all your indicators, and returns structured data for Claude to generate your session bias |
 | `session_save` / `session_get` | Saves your daily brief to `~/.tradingview-mcp/sessions/` so you can compare today vs yesterday |
 | `rules.json` | Write your trading rules once — bias criteria, risk rules, watchlist. The morning brief applies them automatically every day |
+| `scripts/morning_brief_telegram.js` | Runs the morning brief and sends it to Telegram chat IDs from environment variables |
+| `scripts/alert_setup_telegram.js` | Legacy price-alert setup for backward compatibility |
+| `scripts/realtime_alert_watcher.js` | Polls AI VP Reader levels and sends dynamic entry alerts to Telegram |
+| `scripts/alert_router_telegram.js` | Forwards fired TradingView alerts into the Telegram alert group |
 | Launch bug fix | Fixed `tv_launch` compatibility with TradingView Desktop v2.14+ |
 | `tv brief` CLI | Run your morning brief from the terminal in one word |
 
@@ -124,6 +128,41 @@ Or from the terminal:
 npm link  # install tv CLI globally (one time)
 tv brief
 ```
+
+### 7. Send the morning brief to Telegram
+
+Copy `.env.example` to `.env` and set:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_IDS` as a comma-separated list of private chat IDs and/or group chat IDs
+
+Then run:
+
+```bash
+node scripts/morning_brief_telegram.js
+```
+
+The script sends the same brief to every chat ID in the list, so you can target your private chat and your group at the same time.
+
+### 8. Instant alerts
+
+Set `TELEGRAM_ALERT_CHAT_IDS` to the group you want to receive entry alerts.
+Set `TV_REQUIRED_STUDIES` if you want automation to refuse to run unless the active chart contains your AI VP workspace studies.
+Set `TV_RECOVERY_LAYOUT` if you want automation to try switching back to that saved layout before giving up.
+Run the watcher with `npm run alerts:watch`. Set `ALERT_WATCH_INTERVAL_MS` if you want to change the polling interval.
+`brief:telegram` and `alerts:watch` share a lock, so they will not fight over the same TradingView session on a VPS.
+
+The current alert path is dynamic:
+
+- `AI VP Reader - Full Bias Levels` recalculates `CUR / PD / 2D / PW / 2W` levels on every session change
+- `alerts:watch` polls the chart for those live levels, checks your fakeout rules, and sends Telegram alerts directly
+- keep the morning brief on its own daily schedule
+- do not rebuild daily static price alerts unless you are explicitly using the legacy transition path
+- `alerts:router` remains available for any TradingView alerts you still choose to keep
+
+If you want a TradingView-native alert instance for the Pine script, keep that as an optional extra. The default workflow now does not depend on it.
+
+Use `alerts:setup` only if you need the legacy static price-alert mode during transition. Do not treat it as a daily rebuild job.
 
 ---
 

@@ -9,11 +9,122 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as chart from "./chart.js";
 import * as data from "./data.js";
+import { withTradingViewLock } from "./tradingview_lock.js";
+import * as ui from "./ui.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "../../");
 const SESSIONS_DIR = join(homedir(), ".tradingview-mcp", "sessions");
 const USER_DATA_DIR = resolve(join(homedir(), ".tradingview-mcp"));
+const REQUIRED_STUDIES = String(
+  process.env.TV_REQUIRED_STUDIES ||
+    "AI VP Reader - Full Bias Levels,Session Volume Profile,Absorption Bubbles",
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const RECOVERY_LAYOUT = process.env.TV_RECOVERY_LAYOUT?.trim() || "AI VP盯盤＋訊號版面";
+
+async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
+  const start = Date.now();
+  let stableCount = 0;
+  let lastKey = "";
+  const expectedTicker = String(expectedSymbol || "").split(":").pop().toUpperCase();
+
+  while (Date.now() - start < timeoutMs) {
+    let state;
+    try {
+      state = await chart.getState();
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 300));
+      continue;
+    }
+
+    const symbol = String(state?.symbol || "");
+    const resolution = String(state?.resolution || "");
+    const currentTicker = symbol.split(":").pop().toUpperCase();
+    const symbolOk =
+      symbol.toUpperCase().includes(String(expectedSymbol).toUpperCase()) ||
+      currentTicker === expectedTicker ||
+      symbol.toUpperCase().endsWith(`:${expectedTicker}`);
+    const tfOk = !expectedTimeframe || resolution === String(expectedTimeframe) || resolution === `1${expectedTimeframe}`;
+    const key = `${symbol}|${resolution}`;
+
+    if (symbolOk && tfOk) {
+      if (key === lastKey) stableCount += 1;
+      else stableCount = 1;
+      lastKey = key;
+      if (stableCount >= 2) return true;
+    } else {
+      stableCount = 0;
+      lastKey = key;
+    }
+
+    await new Promise((r) => setTimeout(r, 300));
+  }
+
+  return false;
+}
+
+async function assertAiVpWorkspace() {
+  if (!REQUIRED_STUDIES.length) return;
+
+  const isTransientConnectionError = (err) =>
+    /CDP connection failed|fetch failed|No TradingView chart target found|No TradingView chart target/i.test(
+      String(err?.message || err),
+    );
+
+  const checkState = async () => {
+    const state = await chart.getState();
+    const studyNames = (state?.studies || [])
+      .map((s) => String(s?.name || "").trim())
+      .filter(Boolean);
+    const missing = REQUIRED_STUDIES.filter((required) =>
+      !studyNames.some((name) => name.toLowerCase().includes(required.toLowerCase())),
+    );
+    return { state, studyNames, missing };
+  };
+
+  let lastError = null;
+  for (let outerAttempt = 0; outerAttempt < 3; outerAttempt += 1) {
+    try {
+      let current = await checkState();
+      if (!current.missing.length) return;
+
+      if (RECOVERY_LAYOUT) {
+        let recoveryError = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            await ui.layoutSwitch({ name: RECOVERY_LAYOUT });
+            await new Promise((r) => setTimeout(r, 1000));
+            current = await checkState();
+            if (!current.missing.length) return;
+          } catch (err) {
+            recoveryError = err;
+            if (!isTransientConnectionError(err)) break;
+          }
+        }
+
+        const suffix = recoveryError ? `; last recovery error: ${recoveryError.message}` : "";
+        throw new Error(
+          `Active chart is not the AI VP workspace. Missing studies: ${current.missing.join(", ")}; recovery layout: ${RECOVERY_LAYOUT}; retried 3 times${suffix}`,
+        );
+      }
+
+      throw new Error(
+        `Active chart is not the AI VP workspace. Missing studies: ${current.missing.join(", ")}${RECOVERY_LAYOUT ? `; recovery layout: ${RECOVERY_LAYOUT}` : ""}`,
+      );
+    } catch (err) {
+      lastError = err;
+      if (!isTransientConnectionError(err) || outerAttempt === 2) {
+        throw err;
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  throw lastError || new Error("Unknown AI VP workspace check failure");
+}
 
 function assertSafeRulesPath(p) {
   const resolved = resolve(p);
@@ -66,76 +177,97 @@ function loadRules(rulesPath) {
 }
 
 export async function runBrief({ rules_path } = {}) {
-  const { rules, path: loadedFrom } = loadRules(rules_path);
-  const { watchlist = [], default_timeframe = "240" } = rules;
+  return withTradingViewLock(async () => {
+    const { rules, path: loadedFrom } = loadRules(rules_path);
+    const { watchlist = [], default_timeframe = "240" } = rules;
 
-  if (!watchlist.length) {
-    throw new Error(
-      "rules.json watchlist is empty. Add at least one symbol to your watchlist array.",
-    );
-  }
-
-  // Save current chart state so we can restore after scanning
-  let originalSymbol, originalTimeframe;
-  try {
-    const currentState = await chart.getState();
-    originalSymbol = currentState.symbol;
-    originalTimeframe = currentState.resolution;
-  } catch (_) {}
-
-  const results = [];
-
-  for (const symbol of watchlist) {
-    try {
-      await chart.setSymbol({ symbol });
-      await new Promise((r) => setTimeout(r, 900));
-      await chart.setTimeframe({ timeframe: default_timeframe });
-      await new Promise((r) => setTimeout(r, 900));
-
-      const [state, indicators, quote] = await Promise.all([
-        chart.getState(),
-        data.getStudyValues(),
-        data.getQuote({}),
-      ]);
-
-      results.push({
-        symbol,
-        timeframe: default_timeframe,
-        state,
-        indicators,
-        quote,
-      });
-    } catch (err) {
-      results.push({ symbol, error: err.message });
+    if (!watchlist.length) {
+      throw new Error(
+        "rules.json watchlist is empty. Add at least one symbol to your watchlist array.",
+      );
     }
-  }
 
-  // Restore original chart state
-  if (originalSymbol) {
+    await assertAiVpWorkspace();
+
+    // Save current chart state so we can restore after scanning
+    let originalSymbol, originalTimeframe;
     try {
-      await chart.setSymbol({ symbol: originalSymbol });
-      if (originalTimeframe)
-        await chart.setTimeframe({ timeframe: originalTimeframe });
+      const currentState = await chart.getState();
+      originalSymbol = currentState.symbol;
+      originalTimeframe = currentState.resolution;
     } catch (_) {}
-  }
 
-  return {
-    success: true,
-    generated_at: new Date().toISOString(),
-    rules_loaded_from: loadedFrom,
-    rules: {
-      bias_criteria: rules.bias_criteria || null,
-      risk_rules: rules.risk_rules || null,
-      notes: rules.notes || null,
-    },
-    symbols_scanned: results,
-    instruction: [
-      "For each symbol in symbols_scanned, apply the bias_criteria from rules to the indicator readings.",
-      "Output one line per symbol: SYMBOL | BIAS: [bullish/bearish/neutral] | KEY LEVEL: [price] | WATCH: [what to monitor]",
-      "End with a one-sentence overall market read.",
-      "Be direct. No preamble.",
-    ].join(" "),
-  };
+    const results = [];
+
+    for (const symbol of watchlist) {
+      try {
+        await assertAiVpWorkspace();
+        await chart.setSymbol({ symbol });
+        await chart.setTimeframe({ timeframe: default_timeframe });
+        const ready = await waitForExactChartState(symbol, default_timeframe, 25000);
+        if (!ready) {
+          throw new Error(`Chart did not settle on ${symbol} @ ${default_timeframe}`);
+        }
+
+        const [state, indicators, quote, ohlcv] = await Promise.all([
+          chart.getState(),
+          data.getStudyValues(),
+          data.getQuote({}),
+          data.getOhlcv({ count: 120 }),
+        ]);
+
+        const normalizedSymbol = state?.symbol || symbol;
+        const normalizedTicker = String(normalizedSymbol).split(":").pop().toUpperCase();
+        const expectedTicker = String(symbol).split(":").pop().toUpperCase();
+        if (
+          normalizedSymbol &&
+          !(String(normalizedSymbol).toUpperCase().includes(String(symbol).toUpperCase()) ||
+            normalizedTicker === expectedTicker ||
+            String(normalizedSymbol).toUpperCase().endsWith(`:${expectedTicker}`))
+        ) {
+          throw new Error(`Chart symbol mismatch after load: expected ${symbol}, got ${normalizedSymbol}`);
+        }
+
+        results.push({
+          symbol,
+          timeframe: default_timeframe,
+          state,
+          indicators,
+          quote,
+          ohlcv,
+        });
+      } catch (err) {
+        results.push({ symbol, error: err.message });
+      }
+    }
+
+    // Restore original chart state
+    if (originalSymbol) {
+      try {
+        await chart.setSymbol({ symbol: originalSymbol });
+        if (originalTimeframe)
+          await chart.setTimeframe({ timeframe: originalTimeframe });
+      } catch (_) {}
+    }
+
+    return {
+      success: true,
+      generated_at: new Date().toISOString(),
+      rules_loaded_from: loadedFrom,
+      rules: {
+        bias_criteria: rules.bias_criteria || null,
+        risk_rules: rules.risk_rules || null,
+        notes: rules.notes || null,
+      },
+      symbols_scanned: results,
+      instruction: [
+        "For each symbol in symbols_scanned, apply the bias_criteria from rules to the indicator readings.",
+        "Output one line per symbol: SYMBOL | BIAS: [bullish/bearish/neutral] | KEY LEVEL: [price] | WATCH: [what to monitor]",
+        "End with a one-sentence overall market read.",
+        "Be direct. No preamble.",
+      ].join(" "),
+    };
+  }, { name: "morning-brief", waitMs: 10 * 60 * 1000 });
 }
 
 export function saveSession({ brief, date } = {}) {
