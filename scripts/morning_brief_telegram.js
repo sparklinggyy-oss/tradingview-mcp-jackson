@@ -80,6 +80,14 @@ function dateToBrisbaneString(date) {
   return `${year}-${month}-${day}`;
 }
 
+function timestampToBrisbaneString(ts) {
+  if (ts === null || ts === undefined) return null;
+  const n = Number(ts);
+  if (!Number.isFinite(n)) return null;
+  const ms = n < 1e12 ? n * 1000 : n;
+  return dateToBrisbaneString(ms);
+}
+
 function parseLevelSegment(segment) {
   const match = String(segment || "").trim().match(/^(PD|2D|PW|2W)\s+(.+)$/i);
   if (!match) return null;
@@ -157,6 +165,9 @@ function buildSnapshotBySymbol(brief) {
   for (const item of brief.symbols_scanned || []) {
     if (item.error) continue;
     const indicators = item.indicators || {};
+    const bars = item.ohlcv?.bars || [];
+    const firstBar = bars[0] || null;
+    const lastBar = bars[bars.length - 1] || null;
     const indicatorMap = getStudyValuesMap(indicators);
     snapshot.symbols[item.symbol] = {
       levels: detectLevels(indicators),
@@ -165,6 +176,13 @@ function buildSnapshotBySymbol(brief) {
       weeklyBias: biasWord(indicatorMap.AI_WEEKLY_BIAS),
       dailyBias: biasWord(indicatorMap.AI_DAILY_BIAS),
       generated_at: brief.generated_at,
+      ohlcv: {
+        bar_count: bars.length,
+        first_bar_time: firstBar?.time ?? null,
+        last_bar_time: lastBar?.time ?? null,
+        first_brisbane_date: timestampToBrisbaneString(firstBar?.time),
+        last_brisbane_date: timestampToBrisbaneString(lastBar?.time),
+      },
     };
   }
   return snapshot;
@@ -283,6 +301,22 @@ async function main() {
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
   const snapshot = buildSnapshotBySymbol(brief);
+
+  if (captureOnly) {
+    const mismatches = [];
+    for (const [symbol, entry] of Object.entries(snapshot.symbols || {})) {
+      if (entry?.ohlcv?.last_brisbane_date && entry.ohlcv.last_brisbane_date !== targetDate) {
+        mismatches.push({
+          symbol,
+          last_brisbane_date: entry.ohlcv.last_brisbane_date,
+          bar_count: entry.ohlcv.bar_count,
+        });
+      }
+    }
+    if (mismatches.length > 0) {
+      throw new Error(`capture-only date mismatch for ${targetDate}: ${JSON.stringify(mismatches.slice(0, 5))}`);
+    }
+  }
 
   const telegram = getTelegramConfigForKind(process.env, "morning");
 
