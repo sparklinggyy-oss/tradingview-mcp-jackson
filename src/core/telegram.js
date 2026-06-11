@@ -64,20 +64,43 @@ export async function sendTelegramMessage({
   if (!chatId) throw new Error("chatId is missing");
   if (!text) throw new Error("text is missing");
 
-  const resp = await fetch(
-    `https://api.telegram.org/bot${botToken}/sendMessage`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: disablePreview,
-      }),
-    },
-  );
+  const payload = {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: disablePreview,
+  };
 
-  const data = await resp.json().catch(() => ({}));
+  const sendOnce = async (targetChatId) => {
+    const resp = await fetch(
+      `https://api.telegram.org/bot${botToken}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          chat_id: targetChatId,
+        }),
+      },
+    );
+
+    const data = await resp.json().catch(() => ({}));
+    return { resp, data };
+  };
+
+  let { resp, data } = await sendOnce(chatId);
+  const migrateTo = data?.parameters?.migrate_to_chat_id;
+
+  if (
+    (!resp.ok || !data.ok) &&
+    migrateTo &&
+    String(migrateTo) !== String(chatId)
+  ) {
+    console.warn(
+      `[telegram] chat ${chatId} migrated to ${migrateTo}; retrying sendMessage`,
+    );
+    ({ resp, data } = await sendOnce(migrateTo));
+  }
+
   if (!resp.ok || !data.ok) {
     throw new Error(
       data?.description ||
