@@ -462,7 +462,7 @@ export async function runBrief({ rules_path } = {}) {
           symbol,
           timeframe: default_timeframe,
           state,
-          indicators: stableIndicators,
+          indicators: stableAiVp,
           ai_vp: stableAiVp,
           quote,
           ohlcv,
