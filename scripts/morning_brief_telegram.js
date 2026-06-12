@@ -10,6 +10,7 @@ import {
   detectLevels,
   formatPrice,
   getStudyValuesMap,
+  isAfterBrisbaneHour,
   getTodayReminder,
   summarizeYesterdayFakeoutsFromEvents,
 } from "../src/core/brief_levels.js";
@@ -353,6 +354,9 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}, priorEve
     aiVp.weeklyBiasRaw,
     aiVp.dailyBiasRaw,
   );
+  const confidenceNote = isAfterBrisbaneHour(17, generatedAt)
+    ? "註：17:00 Brisbane 後，Developing Current VAH/VAL 參考價值較高。"
+    : "註：17:00 Brisbane 前，Developing Current VAH/VAL 仍屬低權重參考。";
   const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
   return [
@@ -361,6 +365,7 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}, priorEve
     fakeout,
     yesterdayNote,
     reminder,
+    confidenceNote,
     `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
       `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +
       `PW ${formatPrice(levels.pw.poc)}/${formatPrice(levels.pw.vah)}/${formatPrice(levels.pw.val)} | ` +
@@ -397,6 +402,9 @@ function formatBrief(result, priorLevelsBySymbol = {}, priorEventsBySymbol = {})
       aiVp.weeklyBiasRaw,
       aiVp.dailyBiasRaw,
     );
+    const confidenceNote = isAfterBrisbaneHour(17, result.generated_at)
+      ? "註：17:00 Brisbane 後，Developing Current VAH/VAL 參考價值較高。"
+      : "註：17:00 Brisbane 前，Developing Current VAH/VAL 仍屬低權重參考。";
     const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
     rows.push(
@@ -412,6 +420,7 @@ function formatBrief(result, priorLevelsBySymbol = {}, priorEventsBySymbol = {})
     rows.push(fakeout);
     rows.push(yesterdayNote);
     rows.push(reminder);
+    rows.push(confidenceNote);
     rows.push(
       `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
         `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +

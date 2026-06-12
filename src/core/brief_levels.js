@@ -12,6 +12,12 @@ const BRISBANE_DATE_FMT = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
+const BRISBANE_HOUR_FMT = new Intl.DateTimeFormat("en-AU", {
+  timeZone: "Australia/Brisbane",
+  hour: "2-digit",
+  hour12: false,
+});
+
 export function toNum(v) {
   if (v === null || v === undefined || v === "") return null;
   const normalized = String(v)
@@ -99,6 +105,17 @@ function barTimeKey(time) {
   const ms = n < 1e12 ? n * 1000 : n;
   if (!Number.isFinite(ms)) return null;
   return BRISBANE_DATE_FMT.format(new Date(ms));
+}
+
+export function brisbaneHour(date = new Date()) {
+  const parts = BRISBANE_HOUR_FMT.formatToParts(new Date(date));
+  const hour = Number(parts.find((p) => p.type === "hour")?.value);
+  return Number.isFinite(hour) ? hour : null;
+}
+
+export function isAfterBrisbaneHour(hourThreshold = 17, date = new Date()) {
+  const hour = brisbaneHour(date);
+  return hour === null ? false : hour >= hourThreshold;
 }
 
 export function getYesterdaySessionBars(bars) {

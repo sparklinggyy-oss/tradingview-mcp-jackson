@@ -141,5 +141,5 @@
     "Stop loss and take profit rules are intentionally left undefined for this version.",
     "This version focuses on bias, key levels, fakeout behavior, and absorption confirmation."
   ],
-  "notes": "Day trading strategy on the 5m chart. Use prior weekly and daily Volume Profile POC movement to define directional bias. Use today's developing VAH/VAL for counter-week short-term alerts, and prior day/week VAH/VAL fakeouts plus absorption bubbles for trend and swing entries. PW means previous week. PD means previous day. 2D means two days ago. 2W means two weeks ago."
+  "notes": "Day trading strategy on the 5m chart. Use prior weekly and daily Volume Profile POC movement to define directional bias. Use today's developing VAH/VAL for counter-week short-term alerts, but treat Developing Current VAH/VAL as lower-confidence before 17:00 Brisbane and higher-confidence after the European session opens at 17:00 Brisbane. Use prior day/week VAH/VAL fakeouts plus absorption bubbles for trend and swing entries. PW means previous week. PD means previous day. 2D means two days ago. 2W means two weeks ago."
 }

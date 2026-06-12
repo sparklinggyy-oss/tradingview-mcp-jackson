@@ -15,6 +15,7 @@ import {
   formatPrice,
   getAlertPlan,
   getStudyValuesMap,
+  isAfterBrisbaneHour,
   toNum,
 } from "../src/core/brief_levels.js";
 import {
@@ -116,6 +117,9 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
   const price = isFiniteNumber(q.last) ? q.last : isFiniteNumber(q.close) ? q.close : null;
   const triggerSummary = hits.map((hit) => hit.label).join(" / ");
   const groups = groupHits(hits);
+  const confidenceNote = isAfterBrisbaneHour(17)
+    ? "註：17:00 Brisbane 後，Developing Current VAH/VAL 參考價值較高。"
+    : "註：17:00 Brisbane 前，Developing Current VAH/VAL 仍屬低權重參考。";
 
   const lines = [
     `${item.symbol}`,
@@ -139,6 +143,7 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
       `PW ${formatPrice(levels.pw.poc)}/${formatPrice(levels.pw.vah)}/${formatPrice(levels.pw.val)} | ` +
       `2W ${formatPrice(levels.w2.poc)}/${formatPrice(levels.w2.vah)}/${formatPrice(levels.w2.val)}`,
   );
+  lines.push(confidenceNote);
 
   return lines.join("\n");
 }
@@ -165,6 +170,7 @@ function toFakeoutEvents(item, indicatorMap, levels, hits, bar) {
     brisbane_time: brisbaneTimestampString(barTime),
     source_snapshot: snapshotSource,
     label: hit.label,
+    confidence: isAfterBrisbaneHour(17, barTime) ? "normal" : "low",
   }));
 }
 
