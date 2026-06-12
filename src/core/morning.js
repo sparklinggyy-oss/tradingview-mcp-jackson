@@ -13,6 +13,7 @@ import { buildAiVpSnapshotFromStudyValues, getStudyValuesMap } from "./study_val
 import { withTradingViewLock } from "./tradingview_lock.js";
 import * as replay from "./replay.js";
 import * as tab from "./tab.js";
+import * as pane from "./pane.js";
 import { connectToTarget, disconnect, getTargetInfo } from "../connection.js";
 import * as ui from "./ui.js";
 
@@ -22,7 +23,7 @@ const SESSIONS_DIR = join(homedir(), ".tradingview-mcp", "sessions");
 const USER_DATA_DIR = resolve(join(homedir(), ".tradingview-mcp"));
 const REQUIRED_STUDIES = String(
   process.env.TV_REQUIRED_STUDIES ||
-    "AI VP Reader - Full Bias Levels,Session Volume Profile,Absorption Bubbles",
+    "AI VP Reader - Full Bias Levels 10.1,Session Volume Profile,Absorption Bubbles",
 )
   .split(",")
   .map((s) => s.trim())
@@ -48,6 +49,9 @@ const REQUIRED_STUDY_KEYS = [
   "AI_2W_VAL",
 ];
 const DEFAULT_AI_VP_OVERRIDE_FILE = resolve(PROJECT_ROOT, "snapshots", "live_ai_vp_override.json");
+const DEFAULT_MORNING_SYMBOL_SWITCH_DELAY_MS = Number(
+  process.env.TV_MORNING_SYMBOL_SWITCH_DELAY_MS || 20000,
+);
 
 function brisbaneDateString(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
@@ -269,7 +273,7 @@ async function waitForFreshAiVpSnapshotById(entityId, previousSignature = "", ti
   return null;
 }
 
-async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
+async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000, paneIndex = 0) {
   const start = Date.now();
   let stableCount = 0;
   let lastKey = "";
@@ -278,7 +282,7 @@ async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeout
   while (Date.now() - start < timeoutMs) {
     let state;
     try {
-      state = await chart.getState();
+      state = await pane.getState({ index: paneIndex });
     } catch (_) {
       await new Promise((r) => setTimeout(r, 300));
       continue;
@@ -298,13 +302,13 @@ async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeout
       if (key === lastKey) stableCount += 1;
       else stableCount = 1;
       lastKey = key;
-      if (stableCount >= 2) return true;
+      if (stableCount >= 4) return true;
     } else {
       stableCount = 0;
       lastKey = key;
     }
 
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   return false;
@@ -450,11 +454,14 @@ function loadRules(rulesPath) {
   );
 }
 
-export async function runBrief({ rules_path } = {}) {
+export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
   return withTradingViewLock(async () => {
     const { rules, path: loadedFrom } = loadRules(rules_path);
     const { watchlist = [], default_timeframe = "240" } = rules;
     const overrideMap = loadAiVpOverrideMap();
+    const symbolSwitchDelayMs = Number.isFinite(Number(symbol_switch_delay_ms))
+      ? Number(symbol_switch_delay_ms)
+      : DEFAULT_MORNING_SYMBOL_SWITCH_DELAY_MS;
 
     if (!watchlist.length) {
       throw new Error(
@@ -472,6 +479,29 @@ export async function runBrief({ rules_path } = {}) {
       }
     } catch (_) {}
 
+    let originalLayout = null;
+    try {
+      const layoutState = await pane.list();
+      originalLayout = layoutState?.layout || null;
+    } catch (_) {}
+
+    try {
+      await pane.setLayout({ layout: "s" });
+      await new Promise((r) => setTimeout(r, 1000));
+      await pane.focus({ index: 0 });
+    } catch (_) {}
+
+    try {
+      await pane.focus({ index: 0 });
+    } catch (_) {}
+
+    if (default_timeframe) {
+      try {
+        await chart.setTimeframe({ timeframe: default_timeframe });
+        await waitForExactChartState(null, default_timeframe, 15000, 0);
+      } catch (_) {}
+    }
+
     // Save current chart state so we can restore after scanning
     let originalSymbol, originalTimeframe;
     try {
@@ -482,24 +512,57 @@ export async function runBrief({ rules_path } = {}) {
 
     const results = [];
 
-    for (const symbol of watchlist) {
-      try {
+    for (let idx = 0; idx < watchlist.length; idx += 1) {
+    const symbol = watchlist[idx];
+    try {
         await assertAiVpWorkspace();
-        await chart.setSymbol({ symbol });
-        await chart.setTimeframe({ timeframe: default_timeframe });
-        const ready = await waitForExactChartState(symbol, default_timeframe, 25000);
-        if (!ready) {
-          console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
+        let ready = false;
+        let normalizedSymbol = null;
+        let settledState = null;
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+          try {
+            await pane.focus({ index: 0 });
+            await pane.setSymbol({ index: 0, symbol });
+            await pane.focus({ index: 0 });
+          } catch (_) {
+            await chart.setSymbol({ symbol });
+          }
+          ready = await waitForExactChartState(symbol, default_timeframe, 25000, 0);
+          if (!ready) {
+            console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
+          }
+
+          try {
+            await chart.goToRealtime();
+          } catch (_) {}
+          try {
+            await ui.keyboard({ key: "End" });
+          } catch (_) {}
+
+          await new Promise((r) => setTimeout(r, 1000));
+          const currentState = await pane.getState({ index: 0 }).catch(() => null);
+          settledState = currentState;
+          normalizedSymbol = currentState?.symbol || symbol;
+          const normalizedTicker = String(normalizedSymbol).split(":").pop().toUpperCase();
+          const expectedTicker = String(symbol).split(":").pop().toUpperCase();
+          const symbolMatches =
+            normalizedSymbol &&
+            (String(normalizedSymbol).toUpperCase().includes(String(symbol).toUpperCase()) ||
+              normalizedTicker === expectedTicker ||
+              String(normalizedSymbol).toUpperCase().endsWith(`:${expectedTicker}`));
+
+          if (symbolMatches) break;
+
+          if (attempt < 7) {
+            console.warn(
+              `Chart symbol mismatch after load on ${symbol} (attempt ${attempt + 1}/8): expected ${symbol}, got ${normalizedSymbol}; retrying`,
+            );
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
         }
 
-        try {
-          await chart.goToRealtime();
-        } catch (_) {}
-        try {
-          await ui.keyboard({ key: "End" });
-        } catch (_) {}
-
-        await new Promise((r) => setTimeout(r, 1000));
         const overrideAiVp = overrideMap?.[symbol] || null;
         const stableAiVp = overrideAiVp || buildAiVpSnapshotFromStudyValues(await waitForStableStudyValues(25000));
 
@@ -537,21 +600,21 @@ export async function runBrief({ rules_path } = {}) {
         }
 
         const [state, quote, ohlcv] = await Promise.all([
-          chart.getState(),
+          Promise.resolve(settledState || pane.getState({ index: 0 })),
           data.getQuote({}),
           data.getOhlcv({ count: 500 }),
         ]);
 
-        const normalizedSymbol = state?.symbol || symbol;
-        const normalizedTicker = String(normalizedSymbol).split(":").pop().toUpperCase();
+        const loadedSymbol = state?.symbol || symbol;
+        const normalizedTicker = String(loadedSymbol).split(":").pop().toUpperCase();
         const expectedTicker = String(symbol).split(":").pop().toUpperCase();
         if (
-          normalizedSymbol &&
-          !(String(normalizedSymbol).toUpperCase().includes(String(symbol).toUpperCase()) ||
+          loadedSymbol &&
+          !(String(loadedSymbol).toUpperCase().includes(String(symbol).toUpperCase()) ||
             normalizedTicker === expectedTicker ||
-            String(normalizedSymbol).toUpperCase().endsWith(`:${expectedTicker}`))
+            String(loadedSymbol).toUpperCase().endsWith(`:${expectedTicker}`))
         ) {
-          throw new Error(`Chart symbol mismatch after load: expected ${symbol}, got ${normalizedSymbol}`);
+          throw new Error(`Chart symbol mismatch after load: expected ${symbol}, got ${loadedSymbol}`);
         }
 
         results.push({
@@ -566,6 +629,11 @@ export async function runBrief({ rules_path } = {}) {
       } catch (err) {
         results.push({ symbol, error: err.message });
       }
+
+      const isLastSymbol = idx === watchlist.length - 1;
+      if (!isLastSymbol && symbolSwitchDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, symbolSwitchDelayMs));
+      }
     }
 
     // Restore original chart state
@@ -574,6 +642,12 @@ export async function runBrief({ rules_path } = {}) {
         await chart.setSymbol({ symbol: originalSymbol });
         if (originalTimeframe)
           await chart.setTimeframe({ timeframe: originalTimeframe });
+      } catch (_) {}
+    }
+    if (originalLayout) {
+      try {
+        await pane.setLayout({ layout: originalLayout });
+        await new Promise((r) => setTimeout(r, 1000));
       } catch (_) {}
     }
 

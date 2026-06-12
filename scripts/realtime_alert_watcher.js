@@ -27,6 +27,9 @@ const STATE_DIR = resolve(process.env.TMPDIR || "/private/tmp", "tradingview-mcp
 const STATE_PATH = resolve(STATE_DIR, "realtime-alert-state.json");
 const DEFAULT_INTERVAL_MS = Number(process.env.ALERT_WATCH_INTERVAL_MS || 60000);
 const MAX_SEEN_KEYS = Number(process.env.ALERT_WATCH_STATE_LIMIT || 5000);
+const DEFAULT_WATCHER_SYMBOL_SWITCH_DELAY_MS = Number(
+  process.env.TV_WATCHER_SYMBOL_SWITCH_DELAY_MS || 0,
+);
 
 function loadRulesPath() {
   const argIndex = process.argv.findIndex(
@@ -194,7 +197,10 @@ function collectHits(item) {
 }
 
 async function scanOnce(state, telegram, rulesPath) {
-  const brief = await runBrief({ rules_path: rulesPath });
+  const brief = await runBrief({
+    rules_path: rulesPath,
+    symbol_switch_delay_ms: DEFAULT_WATCHER_SYMBOL_SWITCH_DELAY_MS,
+  });
   const fired = [];
 
   for (const item of brief.symbols_scanned || []) {

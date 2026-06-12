@@ -131,6 +131,30 @@ export async function focus({ index }) {
 }
 
 /**
+ * Read symbol/resolution for a specific pane by index.
+ */
+export async function getState({ index }) {
+  const idx = Number(index);
+  const result = await evaluate(`
+    (function() {
+      var cwc = ${CWC};
+      var all = cwc.getAll();
+      if (${idx} >= all.length) return { error: 'Pane index ' + ${idx} + ' out of range (have ' + all.length + ' panes)' };
+      var chart = all[${idx}];
+      var model = chart && chart.model ? chart.model() : null;
+      var mainSeries = model ? model.mainSeries() : null;
+      return {
+        symbol: mainSeries ? mainSeries.symbol() : null,
+        resolution: mainSeries ? mainSeries.interval() : null,
+      };
+    })()
+  `);
+
+  if (result?.error) throw new Error(result.error);
+  return { success: true, index: idx, ...result };
+}
+
+/**
  * Set the symbol on a specific pane by index.
  * Works by focusing the pane, then using the active chart's setSymbol.
  */
@@ -142,10 +166,12 @@ export async function setSymbol({ index, symbol }) {
   await focus({ index: idx });
   await new Promise(r => setTimeout(r, 300));
 
-  // Now set symbol on the now-active chart
+  // Now set symbol on the target pane directly
   await evaluateAsync(`
     (function() {
-      var chart = window.TradingViewApi._activeChartWidgetWV.value();
+      var cwc = ${CWC};
+      var all = cwc.getAll();
+      var chart = all[${idx}];
       return new Promise(function(resolve) {
         chart.setSymbol('${escaped}', {});
         setTimeout(resolve, 500);

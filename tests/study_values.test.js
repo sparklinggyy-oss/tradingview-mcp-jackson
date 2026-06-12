@@ -9,7 +9,7 @@ import {
 } from "../src/core/study_values.js";
 
 describe("study_values — primary AI study selection", () => {
-  it("prefers AI VP Reader - Full Bias Levels over other studies", () => {
+  it("prefers AI VP Reader - Full Bias Levels 10.1 over other studies", () => {
     const indicators = {
       studies: [
         {
@@ -17,7 +17,7 @@ describe("study_values — primary AI study selection", () => {
           values: { AI_PD_VAH: "111", AI_PD_VAL: "222" },
         },
         {
-          name: "AI VP Reader - Full Bias Levels",
+          name: "AI VP Reader - Full Bias Levels 10.1",
           values: { AI_PD_VAH: "61215.3", AI_PD_VAL: "61120.9", AI_WEEKLY_BIAS: 1 },
         },
       ],
@@ -52,7 +52,7 @@ describe("study_values — primary AI study selection", () => {
     const pineLabels = {
       studies: [
         {
-          name: "AI VP Reader - Full Bias Levels",
+          name: "AI VP Reader - Full Bias Levels 10.1",
           labels: [
             {
               text:
@@ -82,7 +82,7 @@ describe("study_values — primary AI study selection", () => {
     const indicators = {
       studies: [
         {
-          name: "AI VP Reader - Full Bias Levels",
+          name: "AI VP Reader - Full Bias Levels 10.1",
           values: {
             AI_WEEKLY_BIAS: -1,
             AI_DAILY_BIAS: 1,
@@ -119,7 +119,7 @@ describe("study_values — primary AI study selection", () => {
     const indicators = {
       studies: [
         {
-          name: "AI VP Reader - Full Bias Levels",
+          name: "AI VP Reader - Full Bias Levels 10.1",
           values: {
             AI_WEEKLY_BIAS: -1,
             AI_DAILY_BIAS: 1,

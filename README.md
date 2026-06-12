@@ -154,7 +154,7 @@ Run the watcher with `npm run alerts:watch`. Set `ALERT_WATCH_INTERVAL_MS` if yo
 
 The current alert path is dynamic:
 
-- `AI VP Reader - Full Bias Levels` recalculates `CUR / PD / 2D / PW / 2W` levels on every session change
+- `AI VP Reader - Full Bias Levels 10.1` recalculates `CUR / PD / 2D / PW / 2W` levels on every session change
 - `alerts:watch` polls the chart for those live levels, checks your fakeout rules, and sends Telegram alerts directly
 - keep the morning brief on its own daily schedule
 - do not rebuild daily static price alerts unless you are explicitly using the legacy transition path
