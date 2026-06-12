@@ -9,6 +9,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as chart from "./chart.js";
 import * as data from "./data.js";
+import { getStudyValuesMap } from "./study_values.js";
 import { withTradingViewLock } from "./tradingview_lock.js";
 import * as ui from "./ui.js";
 
@@ -24,6 +25,25 @@ const REQUIRED_STUDIES = String(
   .map((s) => s.trim())
   .filter(Boolean);
 const RECOVERY_LAYOUT = process.env.TV_RECOVERY_LAYOUT?.trim() || "AI VP盯盤＋訊號版面";
+const REQUIRED_STUDY_KEYS = [
+  "AI_WEEKLY_BIAS",
+  "AI_DAILY_BIAS",
+  "AI_CUR_POC",
+  "AI_CUR_VAH",
+  "AI_CUR_VAL",
+  "AI_PD_POC",
+  "AI_PD_VAH",
+  "AI_PD_VAL",
+  "AI_2D_POC",
+  "AI_2D_VAH",
+  "AI_2D_VAL",
+  "AI_PW_POC",
+  "AI_PW_VAH",
+  "AI_PW_VAL",
+  "AI_2W_POC",
+  "AI_2W_VAH",
+  "AI_2W_VAL",
+];
 
 function brisbaneDateString(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
@@ -51,6 +71,50 @@ function previousBrisbaneDateString(date = new Date()) {
   const utc = new Date(Date.UTC(year, month - 1, day));
   utc.setUTCDate(utc.getUTCDate() - 1);
   return utc.toISOString().slice(0, 10);
+}
+
+function hasRequiredStudyKeys(studyMap) {
+  return REQUIRED_STUDY_KEYS.every((key) => {
+    const value = studyMap?.[key];
+    return value !== undefined && value !== null && value !== "";
+  });
+}
+
+async function waitForStableStudyValues(timeoutMs = 15000) {
+  const start = Date.now();
+  let lastSignature = null;
+  let stableCount = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    let indicators;
+    try {
+      indicators = await data.getStudyValues();
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    const map = getStudyValuesMap(indicators);
+    if (!hasRequiredStudyKeys(map)) {
+      stableCount = 0;
+      lastSignature = null;
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    const signature = REQUIRED_STUDY_KEYS.map((key) => `${key}:${map[key]}`).join("|");
+    if (signature === lastSignature) stableCount += 1;
+    else stableCount = 1;
+    lastSignature = signature;
+
+    if (stableCount >= 2) {
+      return indicators;
+    }
+
+    await new Promise((r) => setTimeout(r, 400));
+  }
+
+  throw new Error("Study values did not stabilize in time.");
 }
 
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
@@ -237,9 +301,10 @@ export async function runBrief({ rules_path } = {}) {
           throw new Error(`Chart did not settle on ${symbol} @ ${default_timeframe}`);
         }
 
-        const [state, indicators, quote, ohlcv] = await Promise.all([
+        const stableIndicators = await waitForStableStudyValues(15000);
+
+        const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),
-          data.getStudyValues(),
           data.getQuote({}),
           data.getOhlcv({ count: 500 }),
         ]);
@@ -260,7 +325,7 @@ export async function runBrief({ rules_path } = {}) {
           symbol,
           timeframe: default_timeframe,
           state,
-          indicators,
+          indicators: stableIndicators,
           quote,
           ohlcv,
         });
