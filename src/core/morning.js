@@ -9,8 +9,7 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as chart from "./chart.js";
 import * as data from "./data.js";
-import { getStudyValuesMap } from "./study_values.js";
-import { extractAiVpSnapshotFromPineLabels } from "./study_values.js";
+import { buildAiVpSnapshotFromStudyValues, getStudyValuesMap } from "./study_values.js";
 import { withTradingViewLock } from "./tradingview_lock.js";
 import * as ui from "./ui.js";
 
@@ -116,30 +115,6 @@ async function waitForStableStudyValues(timeoutMs = 15000) {
   }
 
   throw new Error("Study values did not stabilize in time.");
-}
-
-async function readAiVpSnapshot() {
-  const pineLabels = await data.getPineLabels({
-    study_filter: "AI VP Reader - Full Bias Levels",
-    max_labels: 5,
-  });
-  return extractAiVpSnapshotFromPineLabels(pineLabels);
-}
-
-async function waitForAiVpSnapshot(timeoutMs = 15000) {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const snapshot = await readAiVpSnapshot();
-      if (snapshot) return snapshot;
-    } catch (_) {
-      // ignore and retry until timeout
-    }
-    await new Promise((r) => setTimeout(r, 400));
-  }
-
-  return null;
 }
 
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
@@ -328,7 +303,10 @@ export async function runBrief({ rules_path } = {}) {
 
         const stableIndicators = await waitForStableStudyValues(15000);
         await new Promise((r) => setTimeout(r, 600));
-        const stableAiVp = await waitForAiVpSnapshot(10000);
+        const stableAiVp =
+          buildAiVpSnapshotFromStudyValues(stableIndicators) ||
+          buildAiVpSnapshotFromStudyValues(await data.getStudyValues()) ||
+          null;
 
         const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),

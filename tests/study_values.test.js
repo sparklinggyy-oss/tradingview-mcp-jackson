@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  buildAiVpSnapshotFromStudyValues,
   extractAiVpSnapshotFromPineLabels,
   getPrimaryStudy,
   getStudyValuesMap,
@@ -75,5 +76,42 @@ describe("study_values — primary AI study selection", () => {
     assert.equal(snapshot.weeklyBias, "空頭");
     assert.equal(snapshot.values.AI_CUR_VAH, "63679.0");
     assert.equal(snapshot.values.AI_2W_VAL, "72550.9");
+  });
+
+  it("builds an AI VP snapshot directly from study values", () => {
+    const indicators = {
+      studies: [
+        {
+          name: "AI VP Reader - Full Bias Levels",
+          values: {
+            AI_WEEKLY_BIAS: -1,
+            AI_DAILY_BIAS: 1,
+            AI_CUR_POC: "63597.7",
+            AI_CUR_VAH: "63679.0",
+            AI_CUR_VAL: "63531.6",
+            AI_PD_POC: "62908.7",
+            AI_PD_VAH: "63371.6",
+            AI_PD_VAL: "62322.4",
+            AI_2D_POC: "61215.8",
+            AI_2D_VAH: "62088.7",
+            AI_2D_VAL: "61120.9",
+            AI_PW_POC: "60775.3",
+            AI_PW_VAH: "66849.9",
+            AI_PW_VAL: "59120.0",
+            AI_2W_POC: "73563.9",
+            AI_2W_VAH: "75828.5",
+            AI_2W_VAL: "72550.9",
+          },
+        },
+      ],
+    };
+
+    const snapshot = buildAiVpSnapshotFromStudyValues(indicators);
+    assert.ok(snapshot);
+    assert.equal(snapshot.source, "data_window");
+    assert.equal(snapshot.dailyBias, "多頭");
+    assert.equal(snapshot.weeklyBias, "空頭");
+    assert.equal(snapshot.values.AI_PD_VAH, "63371.6");
+    assert.equal(snapshot.levels.w2.val, "72550.9");
   });
 });

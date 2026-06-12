@@ -7,6 +7,38 @@ function hasAiKeys(values) {
   return Object.keys(values).some((key) => key.startsWith("AI_"));
 }
 
+function hasRequiredAiVpKeys(values) {
+  if (!values || typeof values !== "object") return false;
+  const required = [
+    "AI_WEEKLY_BIAS",
+    "AI_DAILY_BIAS",
+    "AI_CUR_POC",
+    "AI_CUR_VAH",
+    "AI_CUR_VAL",
+    "AI_PD_POC",
+    "AI_PD_VAH",
+    "AI_PD_VAL",
+    "AI_2D_POC",
+    "AI_2D_VAH",
+    "AI_2D_VAL",
+    "AI_PW_POC",
+    "AI_PW_VAH",
+    "AI_PW_VAL",
+    "AI_2W_POC",
+    "AI_2W_VAH",
+    "AI_2W_VAL",
+  ];
+  return required.every((key) => values[key] !== undefined && values[key] !== null && values[key] !== "");
+}
+
+function biasWordLike(value) {
+  if (value === 1 || String(value).trim() === "1") return "多頭";
+  if (value === -1 || String(value).trim() === "-1") return "空頭";
+  if (/bull/i.test(textOf(value))) return "多頭";
+  if (/bear/i.test(textOf(value))) return "空頭";
+  return null;
+}
+
 function normalizeText(value) {
   return value === null || value === undefined ? "" : String(value);
 }
@@ -51,6 +83,32 @@ export function getStudyValuesMap(indicators) {
   const study = selectPrimaryStudy(indicators);
   if (!study || !study.values) return {};
   return { ...study.values };
+}
+
+export function buildAiVpSnapshotFromStudyValues(indicators) {
+  const values = getStudyValuesMap(indicators);
+  if (!hasRequiredAiVpKeys(values)) return null;
+
+  const levels = {
+    cur: { poc: values.AI_CUR_POC, vah: values.AI_CUR_VAH, val: values.AI_CUR_VAL },
+    pd: { poc: values.AI_PD_POC, vah: values.AI_PD_VAH, val: values.AI_PD_VAL },
+    d2: { poc: values.AI_2D_POC, vah: values.AI_2D_VAH, val: values.AI_2D_VAL },
+    pw: { poc: values.AI_PW_POC, vah: values.AI_PW_VAH, val: values.AI_PW_VAL },
+    w2: { poc: values.AI_2W_POC, vah: values.AI_2W_VAH, val: values.AI_2W_VAL },
+  };
+
+  const dailyBiasRaw = values.AI_DAILY_BIAS;
+  const weeklyBiasRaw = values.AI_WEEKLY_BIAS;
+
+  return {
+    source: "data_window",
+    dailyBiasRaw,
+    weeklyBiasRaw,
+    dailyBias: biasWordLike(dailyBiasRaw),
+    weeklyBias: biasWordLike(weeklyBiasRaw),
+    levels,
+    values,
+  };
 }
 
 export function getPrimaryStudy(indicators) {
