@@ -188,7 +188,11 @@ async function readAiVpStudySnapshotById(entityId) {
     const result = await data.getStudyValuesById({ entity_id: entityId });
     return buildAiVpSnapshotFromStudyValues({ studies: [result.study] });
   } catch (_) {
-    return null;
+    try {
+      return buildAiVpSnapshotFromStudyValues(await data.getStudyValues());
+    } catch (_) {
+      return null;
+    }
   }
 }
 
