@@ -74,9 +74,16 @@ function debugAiVpSnapshot(item, sourceLabel = "ai_vp") {
     vah: v.AI_2D_VAH ?? v.AI_3D_VAH,
     val: v.AI_2D_VAL ?? v.AI_3D_VAL,
   };
+  const stateSymbol = item?.state?.symbol || item?.symbol || "unknown";
+  const stateResolution = item?.state?.resolution || item?.timeframe || "unknown";
+  const lastBarTime = item?.ohlcv?.bars?.length
+    ? item.ohlcv.bars[item.ohlcv.bars.length - 1]?.time ?? null
+    : null;
+  const lastBarDate = lastBarTime ? timestampToBrisbaneString(lastBarTime) : null;
 
   console.log(
     `[DEBUG_AI_VP] ${item.symbol} ${sourceLabel}: ` +
+    `state=${stateSymbol}@${stateResolution} last_bar=${lastBarDate || "null"} | ` +
     `daily=${snapshot.dailyBiasRaw} weekly=${snapshot.weeklyBiasRaw} | ` +
     `CUR=${v.AI_CUR_POC}/${v.AI_CUR_VAH}/${v.AI_CUR_VAL} | ` +
     `PD=${v.AI_PD_POC}/${v.AI_PD_VAH}/${v.AI_PD_VAL} | ` +
