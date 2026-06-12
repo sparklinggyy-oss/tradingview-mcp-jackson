@@ -12,6 +12,8 @@ import * as data from "./data.js";
 import { buildAiVpSnapshotFromStudyValues, getStudyValuesMap } from "./study_values.js";
 import { withTradingViewLock } from "./tradingview_lock.js";
 import * as replay from "./replay.js";
+import * as tab from "./tab.js";
+import { connectToTarget, disconnect, getTargetInfo } from "../connection.js";
 import * as ui from "./ui.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -341,6 +343,21 @@ async function assertAiVpWorkspace() {
   throw lastError || new Error("Unknown AI VP workspace check failure");
 }
 
+async function focusPrimaryTradingViewTab() {
+  try {
+    const tabs = await tab.list();
+    if (!tabs?.tabs?.length) return;
+    const primary = tabs.tabs[0];
+    if (!primary) return;
+    const currentTarget = await getTargetInfo().catch(() => null);
+    if (currentTarget?.id === primary.id) return;
+    await tab.switchTab({ index: 0 });
+    await disconnect().catch(() => {});
+    await connectToTarget(primary.id);
+    await new Promise((r) => setTimeout(r, 1000));
+  } catch (_) {}
+}
+
 function assertSafeRulesPath(p) {
   const resolved = resolve(p);
   const inProject =
@@ -402,6 +419,7 @@ export async function runBrief({ rules_path } = {}) {
       );
     }
 
+    await focusPrimaryTradingViewTab();
     await assertAiVpWorkspace();
     try {
       const replayState = await replay.status();

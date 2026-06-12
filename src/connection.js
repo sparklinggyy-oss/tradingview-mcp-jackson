@@ -43,10 +43,20 @@ export async function getClient() {
 }
 
 export async function connect() {
+  return connectToTarget(null);
+}
+
+export async function connectToTarget(targetId) {
+  if (client) {
+    try { await client.close(); } catch {}
+    client = null;
+    targetInfo = null;
+  }
+
   let lastError;
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      const target = await findChartTarget();
+      const target = targetId ? await findChartTargetById(targetId) : await findChartTarget();
       if (!target) {
         throw new Error('No TradingView chart target found. Is TradingView open with a chart?');
       }
@@ -75,6 +85,12 @@ async function findChartTarget() {
   return targets.find(t => t.type === 'page' && /tradingview\.com\/chart/i.test(t.url))
     || targets.find(t => t.type === 'page' && /tradingview/i.test(t.url))
     || null;
+}
+
+async function findChartTargetById(targetId) {
+  const resp = await fetch(`http://${CDP_HOST}:${CDP_PORT}/json/list`);
+  const targets = await resp.json();
+  return targets.find((t) => t.id === targetId) || null;
 }
 
 export async function getTargetInfo() {
