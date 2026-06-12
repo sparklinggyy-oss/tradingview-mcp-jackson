@@ -11,12 +11,13 @@ import {
   formatPrice,
   getStudyValuesMap,
   getTodayReminder,
-  summarizeYesterdayFakeouts,
+  summarizeYesterdayFakeoutsFromEvents,
 } from "../src/core/brief_levels.js";
 import {
   getTelegramConfigForKind,
   sendTelegramBroadcast,
 } from "../src/core/telegram.js";
+import { loadFakeoutEvents } from "../src/core/fakeout_log.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
@@ -317,7 +318,19 @@ function levelsBySymbolFromSession(session) {
   return parsePriorSessionLevels(session?.brief || "");
 }
 
-function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
+function eventsBySymbolFromSession(session) {
+  const groups = {};
+  const events = Array.isArray(session?.events) ? session.events : [];
+  for (const event of events) {
+    const symbol = String(event?.symbol || "").trim();
+    if (!symbol) continue;
+    if (!groups[symbol]) groups[symbol] = [];
+    groups[symbol].push(event);
+  }
+  return groups;
+}
+
+function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}, priorEventsBySymbol = {}) {
   if (item.error) {
     return `${item.symbol} | ERROR: ${item.error}`;
   }
@@ -332,12 +345,8 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
   const daily = aiVp.dailyBias || biasWord(aiVp.dailyBiasRaw);
   const weekly = aiVp.weeklyBias || biasWord(aiVp.weeklyBiasRaw);
   const aligned = daily === weekly && daily !== "中性";
-  const bars = item.ohlcv?.bars || [];
-  const fakeout = summarizeYesterdayFakeouts(
-    bars,
-    priorLevelsBySymbol[item.symbol] || levels,
-    aiVp.dailyBiasRaw,
-    aiVp.weeklyBiasRaw,
+  const fakeout = summarizeYesterdayFakeoutsFromEvents(
+    priorEventsBySymbol[item.symbol] || [],
   );
   const reminder = getTodayReminder(
     levels,
@@ -359,7 +368,7 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
   ].join("\n");
 }
 
-function formatBrief(result, priorLevelsBySymbol = {}) {
+function formatBrief(result, priorLevelsBySymbol = {}, priorEventsBySymbol = {}) {
   const rows = [];
   rows.push(`Morning brief ${new Date(result.generated_at).toLocaleString("en-GB", { timeZone: "Australia/Brisbane" })} Brisbane`);
 
@@ -380,12 +389,8 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
     const daily = aiVp.dailyBias || biasWord(aiVp.dailyBiasRaw);
     const weekly = aiVp.weeklyBias || biasWord(aiVp.weeklyBiasRaw);
     const aligned = daily === weekly && daily !== "中性";
-    const bars = item.ohlcv?.bars || [];
-    const fakeout = summarizeYesterdayFakeouts(
-      bars,
-      priorLevelsBySymbol[item.symbol] || levels,
-      aiVp.dailyBiasRaw,
-      aiVp.weeklyBiasRaw,
+    const fakeout = summarizeYesterdayFakeoutsFromEvents(
+      priorEventsBySymbol[item.symbol] || [],
     );
     const reminder = getTodayReminder(
       levels,
@@ -427,6 +432,8 @@ async function main() {
   const effectiveBrief = applyAiVpOverrides(brief, overrideMap);
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
+  const priorEvents = loadFakeoutEvents({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
+  const priorEventsBySymbol = eventsBySymbolFromSession(priorEvents);
   const snapshot = buildSnapshotBySymbol(effectiveBrief);
 
   if (captureOnly) {
@@ -449,7 +456,7 @@ async function main() {
 
   if (!telegram.enabled && !captureOnly) {
     console.error("Telegram config missing. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS (or TELEGRAM_CHAT_ID).");
-    console.log(formatBrief(effectiveBrief));
+    console.log(formatBrief(effectiveBrief, priorLevelsBySymbol, priorEventsBySymbol));
     process.exit(1);
   }
 
@@ -459,7 +466,7 @@ async function main() {
       if (process.env.DEBUG_AI_VP === "1") {
         debugAiVpSnapshot(item, "main");
       }
-      const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol);
+      const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol, priorEventsBySymbol);
       const result = await sendTelegramBroadcast({
         botToken: telegram.botToken,
         chatIds: telegram.chatIds,
@@ -469,7 +476,11 @@ async function main() {
     }
   }
 
-  await saveSession({ brief: formatBrief(effectiveBrief, priorLevelsBySymbol), snapshot, date: targetDate });
+  await saveSession({
+    brief: formatBrief(effectiveBrief, priorLevelsBySymbol, priorEventsBySymbol),
+    snapshot,
+    date: targetDate,
+  });
 
   console.log(JSON.stringify({
     success: true,

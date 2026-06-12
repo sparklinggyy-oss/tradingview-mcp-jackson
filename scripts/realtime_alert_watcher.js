@@ -6,6 +6,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runBrief } from "../src/core/morning.js";
 import {
+  appendFakeoutEvent,
+  brisbaneDateString,
+  brisbaneTimestampString,
+} from "../src/core/fakeout_log.js";
+import {
   detectLevels,
   formatPrice,
   getAlertPlan,
@@ -135,6 +140,31 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
   return lines.join("\n");
 }
 
+function toFakeoutEvents(item, indicatorMap, levels, hits, bar) {
+  const daily = toNum(indicatorMap.AI_DAILY_BIAS);
+  const weekly = toNum(indicatorMap.AI_WEEKLY_BIAS);
+  const snapshotSource = item?.ai_vp?.source || "data_window";
+  const barTime = bar?.time ?? bar?.timestamp ?? null;
+
+  return hits.map((hit) => ({
+    symbol: item.symbol,
+    date: brisbaneDateString(barTime || new Date()),
+    session: brisbaneDateString(barTime || new Date()),
+    level_set: hit.label.includes("CUR") ? "CUR" : hit.label.split(" ")[0],
+    level_side: hit.mode === "val" ? "VAL" : "VAH",
+    level_price: formatPrice(hit.level),
+    event_type: "fakeout",
+    trigger: "sweep_and_reclaim",
+    opportunity: hit.opportunity,
+    daily_bias_raw: daily,
+    weekly_bias_raw: weekly,
+    bar_time: barTime,
+    brisbane_time: brisbaneTimestampString(barTime),
+    source_snapshot: snapshotSource,
+    label: hit.label,
+  }));
+}
+
 function collectHits(item) {
   const indicators = item.indicators || {};
   const aiVp = resolveAiVpSnapshot(item);
@@ -184,6 +214,9 @@ async function scanOnce(state, telegram, rulesPath) {
     if (!newHits.length) continue;
 
     const text = buildAlertText(item, indicatorMap, levels, newHits, bar);
+    for (const event of toFakeoutEvents(item, indicatorMap, levels, newHits, bar)) {
+      appendFakeoutEvent(event);
+    }
     await sendTelegramBroadcast({
       botToken: telegram.botToken,
       chatIds: telegram.chatIds,

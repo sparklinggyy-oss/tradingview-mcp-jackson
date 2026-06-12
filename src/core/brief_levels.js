@@ -148,6 +148,16 @@ export function summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias) 
   return "昨日未見明確 fakeout";
 }
 
+export function summarizeYesterdayFakeoutsFromEvents(events) {
+  const labels = [...new Set((Array.isArray(events) ? events : [])
+    .map((event) => String(event?.label || "").trim())
+    .filter(Boolean))];
+  if (labels.length > 0) {
+    return `昨日已 fakeout：${labels.join(" / ")}`;
+  }
+  return "昨日未見明確 fakeout";
+}
+
 export function getTodayReminder(levels, weeklyBias, dailyBias) {
   const daily = biasWord(dailyBias);
   const weekly = biasWord(weeklyBias);
