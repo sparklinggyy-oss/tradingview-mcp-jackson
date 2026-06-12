@@ -59,6 +59,33 @@ function resolveAiVpSnapshot(item) {
   return snapshot;
 }
 
+function debugAiVpSnapshot(item, sourceLabel = "ai_vp") {
+  if (process.env.DEBUG_AI_VP !== "1") return;
+
+  const snapshot = resolveAiVpSnapshot(item);
+  if (!snapshot) {
+    console.log(`[DEBUG_AI_VP] ${item?.symbol || "unknown"} ${sourceLabel}: unavailable`);
+    return;
+  }
+
+  const v = snapshot.values || {};
+  const d2 = {
+    poc: v.AI_2D_POC ?? v.AI_3D_POC,
+    vah: v.AI_2D_VAH ?? v.AI_3D_VAH,
+    val: v.AI_2D_VAL ?? v.AI_3D_VAL,
+  };
+
+  console.log(
+    `[DEBUG_AI_VP] ${item.symbol} ${sourceLabel}: ` +
+    `daily=${snapshot.dailyBiasRaw} weekly=${snapshot.weeklyBiasRaw} | ` +
+    `CUR=${v.AI_CUR_POC}/${v.AI_CUR_VAH}/${v.AI_CUR_VAL} | ` +
+    `PD=${v.AI_PD_POC}/${v.AI_PD_VAH}/${v.AI_PD_VAL} | ` +
+    `2D=${d2.poc}/${d2.vah}/${d2.val} | ` +
+    `PW=${v.AI_PW_POC}/${v.AI_PW_VAH}/${v.AI_PW_VAL} | ` +
+    `2W=${v.AI_2W_POC}/${v.AI_2W_VAH}/${v.AI_2W_VAL}`,
+  );
+}
+
 function previousDateString(reference = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Brisbane",
@@ -215,24 +242,27 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
     return `${item.symbol} | ERROR: ${item.error}`;
   }
 
-  const indicators = item.indicators || {};
   const aiVp = resolveAiVpSnapshot(item);
-  const indicatorMap = aiVp?.values || getStudyValuesMap(indicators);
-  const levels = aiVp?.levels || detectLevels(indicators);
-  const daily = aiVp?.dailyBias || biasWord(indicatorMap.AI_DAILY_BIAS);
-  const weekly = aiVp?.weeklyBias || biasWord(indicatorMap.AI_WEEKLY_BIAS);
+  if (!aiVp) {
+    return `${item.symbol} | ERROR: AI VP snapshot unavailable for ${item.symbol}`;
+  }
+  debugAiVpSnapshot(item, "formatSymbolBrief");
+
+  const levels = aiVp.levels;
+  const daily = aiVp.dailyBias || biasWord(aiVp.dailyBiasRaw);
+  const weekly = aiVp.weeklyBias || biasWord(aiVp.weeklyBiasRaw);
   const aligned = daily === weekly && daily !== "中性";
   const bars = item.ohlcv?.bars || [];
   const fakeout = summarizeYesterdayFakeouts(
     bars,
     priorLevelsBySymbol[item.symbol] || levels,
-    indicatorMap.AI_DAILY_BIAS,
-    indicatorMap.AI_WEEKLY_BIAS,
+    aiVp.dailyBiasRaw,
+    aiVp.weeklyBiasRaw,
   );
   const reminder = getTodayReminder(
     levels,
-    indicatorMap.AI_WEEKLY_BIAS,
-    indicatorMap.AI_DAILY_BIAS,
+    aiVp.weeklyBiasRaw,
+    aiVp.dailyBiasRaw,
   );
   const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
@@ -259,23 +289,28 @@ function formatBrief(result, priorLevelsBySymbol = {}) {
       continue;
     }
 
-    const indicators = item.indicators || {};
-    const indicatorMap = getStudyValuesMap(indicators);
-    const levels = detectLevels(indicators);
-    const daily = biasWord(indicatorMap.AI_DAILY_BIAS);
-    const weekly = biasWord(indicatorMap.AI_WEEKLY_BIAS);
+    const aiVp = resolveAiVpSnapshot(item);
+    if (!aiVp) {
+      rows.push(`${item.symbol} | ERROR: AI VP snapshot unavailable for ${item.symbol}`);
+      continue;
+    }
+    debugAiVpSnapshot(item, "formatBrief");
+
+    const levels = aiVp.levels;
+    const daily = aiVp.dailyBias || biasWord(aiVp.dailyBiasRaw);
+    const weekly = aiVp.weeklyBias || biasWord(aiVp.weeklyBiasRaw);
     const aligned = daily === weekly && daily !== "中性";
     const bars = item.ohlcv?.bars || [];
     const fakeout = summarizeYesterdayFakeouts(
       bars,
       priorLevelsBySymbol[item.symbol] || levels,
-      indicatorMap.AI_DAILY_BIAS,
-      indicatorMap.AI_WEEKLY_BIAS,
+      aiVp.dailyBiasRaw,
+      aiVp.weeklyBiasRaw,
     );
     const reminder = getTodayReminder(
       levels,
-      indicatorMap.AI_WEEKLY_BIAS,
-      indicatorMap.AI_DAILY_BIAS,
+      aiVp.weeklyBiasRaw,
+      aiVp.dailyBiasRaw,
     );
     const yesterdayNote = "註：CUR/PD/2D/PW/2W 皆為昨日 session 內 AI VP Reader 數值";
 
@@ -339,6 +374,9 @@ async function main() {
   const sent = [];
   if (!captureOnly) {
     for (const item of brief.symbols_scanned || []) {
+      if (process.env.DEBUG_AI_VP === "1") {
+        debugAiVpSnapshot(item, "main");
+      }
       const text = formatSymbolBrief(item, brief.generated_at, priorLevelsBySymbol);
       const result = await sendTelegramBroadcast({
         botToken: telegram.botToken,
