@@ -223,6 +223,15 @@ async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeout
   return false;
 }
 
+function findPrimaryAiVpStudy(studies) {
+  const normalized = Array.isArray(studies) ? studies : [];
+  const exactMatches = normalized.filter((study) =>
+    String(study?.name || "").toLowerCase().includes("ai vp reader - full bias levels"),
+  );
+  if (exactMatches.length > 0) return exactMatches[exactMatches.length - 1];
+  return normalized[normalized.length - 1] || null;
+}
+
 async function assertAiVpWorkspace() {
   if (!REQUIRED_STUDIES.length) return;
 
@@ -369,12 +378,15 @@ export async function runBrief({ rules_path } = {}) {
 
         const stableIndicators = await waitForStableStudyValues(15000);
         await new Promise((r) => setTimeout(r, 600));
+        const stateAfter = await chart.getState();
+        const aiStudy = findPrimaryAiVpStudy(stateAfter?.studies || []);
+        const aiStudyValues = aiStudy?.id
+          ? await data.getStudyValuesById({ entity_id: aiStudy.id })
+          : null;
         const stableAiVp =
-          await waitForFreshAiVpSnapshot(
-            aiVpSnapshotSignature(previousAiVpSnapshot),
-            20000,
+          buildAiVpSnapshotFromStudyValues(
+            aiStudyValues ? { studies: [aiStudyValues.study] } : stableIndicators,
           ) ||
-          buildAiVpSnapshotFromStudyValues(stableIndicators) ||
           buildAiVpSnapshotFromStudyValues(await data.getStudyValues()) ||
           null;
 

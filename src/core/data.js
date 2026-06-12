@@ -357,6 +357,46 @@ export async function getStudyValues() {
   return { success: true, study_count: data?.length || 0, studies: data || [] };
 }
 
+export async function getStudyValuesById({ entity_id } = {}) {
+  if (!entity_id) throw new Error("entity_id is required");
+  const data = await evaluate(`
+    (function() {
+      var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
+      var model = chart.model();
+      var sources = model.model().dataSources();
+      for (var si = 0; si < sources.length; si++) {
+        var s = sources[si];
+        if (!s || s.id !== '${entity_id}') continue;
+        if (!s.metaInfo) continue;
+        try {
+          var meta = s.metaInfo();
+          var name = meta.description || meta.shortDescription || '';
+          if (!name) name = s.name || s.title || 'unknown';
+          var values = {};
+          try {
+            var dwv = s.dataWindowView();
+            if (dwv) {
+              var items = dwv.items();
+              if (items) {
+                for (var i = 0; i < items.length; i++) {
+                  var item = items[i];
+                  if (item._value && item._value !== '∅' && item._title) values[item._title] = item._value;
+                }
+              }
+            }
+          } catch(e) {}
+          return { id: s.id || null, name: name, values: values };
+        } catch(e) {
+          return { error: e.message };
+        }
+      }
+      return { error: 'Study not found: ${entity_id}' };
+    })()
+  `);
+  if (!data || data.error) throw new Error(data?.error || `Study not found: ${entity_id}`);
+  return { success: true, study: data };
+}
+
 export async function getPineLines({ study_filter, verbose } = {}) {
   const filter = study_filter || '';
   const raw = await evaluate(buildGraphicsJS('dwglines', 'lines', filter));
