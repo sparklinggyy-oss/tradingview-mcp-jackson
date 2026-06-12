@@ -18,9 +18,9 @@ function hasRequiredAiVpKeys(values) {
     "AI_PD_POC",
     "AI_PD_VAH",
     "AI_PD_VAL",
-    "AI_2D_POC",
-    "AI_2D_VAH",
-    "AI_2D_VAL",
+    ["AI_2D_POC", "AI_3D_POC"],
+    ["AI_2D_VAH", "AI_3D_VAH"],
+    ["AI_2D_VAL", "AI_3D_VAL"],
     "AI_PW_POC",
     "AI_PW_VAH",
     "AI_PW_VAL",
@@ -28,7 +28,12 @@ function hasRequiredAiVpKeys(values) {
     "AI_2W_VAH",
     "AI_2W_VAL",
   ];
-  return required.every((key) => values[key] !== undefined && values[key] !== null && values[key] !== "");
+  return required.every((key) => {
+    if (Array.isArray(key)) {
+      return key.some((alt) => values[alt] !== undefined && values[alt] !== null && values[alt] !== "");
+    }
+    return values[key] !== undefined && values[key] !== null && values[key] !== "";
+  });
 }
 
 function biasWordLike(value) {
@@ -89,10 +94,14 @@ export function buildAiVpSnapshotFromStudyValues(indicators) {
   const values = getStudyValuesMap(indicators);
   if (!hasRequiredAiVpKeys(values)) return null;
 
+  const d2Poc = values.AI_2D_POC ?? values.AI_3D_POC ?? null;
+  const d2Vah = values.AI_2D_VAH ?? values.AI_3D_VAH ?? null;
+  const d2Val = values.AI_2D_VAL ?? values.AI_3D_VAL ?? null;
+
   const levels = {
     cur: { poc: values.AI_CUR_POC, vah: values.AI_CUR_VAH, val: values.AI_CUR_VAL },
     pd: { poc: values.AI_PD_POC, vah: values.AI_PD_VAH, val: values.AI_PD_VAL },
-    d2: { poc: values.AI_2D_POC, vah: values.AI_2D_VAH, val: values.AI_2D_VAL },
+    d2: { poc: d2Poc, vah: d2Vah, val: d2Val },
     pw: { poc: values.AI_PW_POC, vah: values.AI_PW_VAH, val: values.AI_PW_VAL },
     w2: { poc: values.AI_2W_POC, vah: values.AI_2W_VAH, val: values.AI_2W_VAL },
   };

@@ -114,4 +114,38 @@ describe("study_values — primary AI study selection", () => {
     assert.equal(snapshot.values.AI_PD_VAH, "63371.6");
     assert.equal(snapshot.levels.w2.val, "72550.9");
   });
+
+  it("accepts AI_3D values as the daily-looking historical level set", () => {
+    const indicators = {
+      studies: [
+        {
+          name: "AI VP Reader - Full Bias Levels",
+          values: {
+            AI_WEEKLY_BIAS: -1,
+            AI_DAILY_BIAS: 1,
+            AI_CUR_POC: "63583.2",
+            AI_CUR_VAH: "63717.6",
+            AI_CUR_VAL: "63443.2",
+            AI_PD_POC: "62908.7",
+            AI_PD_VAH: "63371.6",
+            AI_PD_VAL: "62322.4",
+            AI_3D_POC: "61747.5",
+            AI_3D_VAH: "62627.0",
+            AI_3D_VAL: "60906.3",
+            AI_PW_POC: "60775.3",
+            AI_PW_VAH: "66849.9",
+            AI_PW_VAL: "59120.0",
+            AI_2W_POC: "73563.9",
+            AI_2W_VAH: "75828.5",
+            AI_2W_VAL: "72550.9",
+          },
+        },
+      ],
+    };
+
+    const snapshot = buildAiVpSnapshotFromStudyValues(indicators);
+    assert.ok(snapshot);
+    assert.equal(snapshot.levels.d2.vah, "62627.0");
+    assert.equal(snapshot.levels.d2.val, "60906.3");
+  });
 });
