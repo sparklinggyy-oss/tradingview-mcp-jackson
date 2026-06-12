@@ -126,47 +126,20 @@ async function readAiVpSnapshot() {
   return extractAiVpSnapshotFromPineLabels(pineLabels);
 }
 
-async function waitForStableAiVpSnapshot(timeoutMs = 15000, baselineSignature = null) {
+async function waitForAiVpSnapshot(timeoutMs = 15000) {
   const start = Date.now();
-  let lastSignature = null;
-  let stableCount = 0;
-  let changedFromBaseline = baselineSignature === null;
 
   while (Date.now() - start < timeoutMs) {
     try {
       const snapshot = await readAiVpSnapshot();
-      if (!snapshot) {
-        stableCount = 0;
-        lastSignature = null;
-        await new Promise((r) => setTimeout(r, 400));
-        continue;
-      }
-
-      const signature = Object.entries(snapshot.values || {})
-        .map(([key, value]) => `${key}:${value}`)
-        .join("|");
-
-      if (!changedFromBaseline) {
-        changedFromBaseline = signature !== baselineSignature;
-        stableCount = 0;
-        lastSignature = signature;
-        await new Promise((r) => setTimeout(r, 400));
-        continue;
-      }
-
-      if (signature === lastSignature) stableCount += 1;
-      else stableCount = 1;
-
-      lastSignature = signature;
-      if (stableCount >= 2) return snapshot;
-
-      await new Promise((r) => setTimeout(r, 400));
+      if (snapshot) return snapshot;
     } catch (_) {
-      await new Promise((r) => setTimeout(r, 400));
+      // ignore and retry until timeout
     }
+    await new Promise((r) => setTimeout(r, 400));
   }
 
-  throw new Error("AI VP label snapshot did not stabilize in time.");
+  return null;
 }
 
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
@@ -354,13 +327,8 @@ export async function runBrief({ rules_path } = {}) {
         }
 
         const stableIndicators = await waitForStableStudyValues(15000);
-        const baselineSnapshot = await readAiVpSnapshot();
-        const baselineSignature = baselineSnapshot
-          ? Object.entries(baselineSnapshot.values || {})
-              .map(([key, value]) => `${key}:${value}`)
-              .join("|")
-          : null;
-        const stableAiVp = await waitForStableAiVpSnapshot(15000, baselineSignature);
+        await new Promise((r) => setTimeout(r, 600));
+        const stableAiVp = await waitForAiVpSnapshot(10000);
 
         const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),
