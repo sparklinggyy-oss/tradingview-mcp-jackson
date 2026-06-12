@@ -80,6 +80,29 @@ function hasRequiredStudyKeys(studyMap) {
   });
 }
 
+function aiVpSnapshotSignature(snapshot) {
+  if (!snapshot?.values) return "";
+  return [
+    snapshot.dailyBiasRaw ?? "",
+    snapshot.weeklyBiasRaw ?? "",
+    snapshot.values.AI_CUR_POC ?? "",
+    snapshot.values.AI_CUR_VAH ?? "",
+    snapshot.values.AI_CUR_VAL ?? "",
+    snapshot.values.AI_PD_POC ?? "",
+    snapshot.values.AI_PD_VAH ?? "",
+    snapshot.values.AI_PD_VAL ?? "",
+    snapshot.values.AI_2D_POC ?? "",
+    snapshot.values.AI_2D_VAH ?? "",
+    snapshot.values.AI_2D_VAL ?? "",
+    snapshot.values.AI_PW_POC ?? "",
+    snapshot.values.AI_PW_VAH ?? "",
+    snapshot.values.AI_PW_VAL ?? "",
+    snapshot.values.AI_2W_POC ?? "",
+    snapshot.values.AI_2W_VAH ?? "",
+    snapshot.values.AI_2W_VAL ?? "",
+  ].join("|");
+}
+
 async function waitForStableStudyValues(timeoutMs = 15000) {
   const start = Date.now();
   let lastSignature = null;
@@ -115,6 +138,48 @@ async function waitForStableStudyValues(timeoutMs = 15000) {
   }
 
   throw new Error("Study values did not stabilize in time.");
+}
+
+async function readAiVpStudySnapshot() {
+  try {
+    return buildAiVpSnapshotFromStudyValues(await data.getStudyValues());
+  } catch (_) {
+    return null;
+  }
+}
+
+async function waitForFreshAiVpSnapshot(previousSignature = "", timeoutMs = 20000) {
+  const start = Date.now();
+  let lastSignature = null;
+  let stableCount = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    const snapshot = await readAiVpStudySnapshot();
+    const signature = aiVpSnapshotSignature(snapshot);
+    if (!snapshot || !signature) {
+      stableCount = 0;
+      lastSignature = null;
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
+    if (previousSignature && signature === previousSignature) {
+      stableCount = 0;
+      lastSignature = signature;
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
+    if (signature === lastSignature) stableCount += 1;
+    else stableCount = 1;
+    lastSignature = signature;
+
+    if (stableCount >= 2) return snapshot;
+
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  return null;
 }
 
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
@@ -294,6 +359,7 @@ export async function runBrief({ rules_path } = {}) {
     for (const symbol of watchlist) {
       try {
         await assertAiVpWorkspace();
+        const previousAiVpSnapshot = await readAiVpStudySnapshot();
         await chart.setSymbol({ symbol });
         await chart.setTimeframe({ timeframe: default_timeframe });
         const ready = await waitForExactChartState(symbol, default_timeframe, 25000);
@@ -304,6 +370,10 @@ export async function runBrief({ rules_path } = {}) {
         const stableIndicators = await waitForStableStudyValues(15000);
         await new Promise((r) => setTimeout(r, 600));
         const stableAiVp =
+          await waitForFreshAiVpSnapshot(
+            aiVpSnapshotSignature(previousAiVpSnapshot),
+            20000,
+          ) ||
           buildAiVpSnapshotFromStudyValues(stableIndicators) ||
           buildAiVpSnapshotFromStudyValues(await data.getStudyValues()) ||
           null;
