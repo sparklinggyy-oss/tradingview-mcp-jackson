@@ -91,6 +91,13 @@ function groupHits(hits) {
   return groups;
 }
 
+function resolveAiVpSnapshot(item) {
+  const snapshot = item?.ai_vp || null;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  if (!snapshot.levels || !snapshot.values) return null;
+  return snapshot;
+}
+
 function buildAlertText(item, indicatorMap, levels, hits, bar) {
   const daily = indicatorMap.AI_DAILY_BIAS;
   const weekly = indicatorMap.AI_WEEKLY_BIAS;
@@ -130,8 +137,9 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
 
 function collectHits(item) {
   const indicators = item.indicators || {};
-  const indicatorMap = getStudyValuesMap(indicators);
-  const levels = detectLevels(indicators);
+  const aiVp = resolveAiVpSnapshot(item);
+  const indicatorMap = aiVp?.values || getStudyValuesMap(indicators);
+  const levels = aiVp?.levels || detectLevels(indicators);
   const plan = getAlertPlan(levels, indicatorMap.AI_WEEKLY_BIAS, indicatorMap.AI_DAILY_BIAS);
   const bar = latestClosedBar(item.ohlcv?.bars || []);
 

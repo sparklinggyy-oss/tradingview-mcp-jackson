@@ -52,6 +52,13 @@ function isFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+function resolveAiVpSnapshot(item) {
+  const snapshot = item?.ai_vp || null;
+  if (!snapshot || typeof snapshot !== "object") return null;
+  if (!snapshot.levels || !snapshot.values) return null;
+  return snapshot;
+}
+
 function previousDateString(reference = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Brisbane",
@@ -168,14 +175,16 @@ function buildSnapshotBySymbol(brief) {
     const bars = item.ohlcv?.bars || [];
     const firstBar = bars[0] || null;
     const lastBar = bars[bars.length - 1] || null;
-    const indicatorMap = getStudyValuesMap(indicators);
+    const aiVp = resolveAiVpSnapshot(item);
+    const indicatorMap = aiVp?.values || getStudyValuesMap(indicators);
     snapshot.symbols[item.symbol] = {
-      levels: detectLevels(indicators),
+      levels: aiVp?.levels || detectLevels(indicators),
       weeklyBiasRaw: indicatorMap.AI_WEEKLY_BIAS ?? null,
       dailyBiasRaw: indicatorMap.AI_DAILY_BIAS ?? null,
-      weeklyBias: biasWord(indicatorMap.AI_WEEKLY_BIAS),
-      dailyBias: biasWord(indicatorMap.AI_DAILY_BIAS),
+      weeklyBias: aiVp?.weeklyBias || biasWord(indicatorMap.AI_WEEKLY_BIAS),
+      dailyBias: aiVp?.dailyBias || biasWord(indicatorMap.AI_DAILY_BIAS),
       generated_at: brief.generated_at,
+      source: aiVp?.source || "data_window",
       ohlcv: {
         bar_count: bars.length,
         first_bar_time: firstBar?.time ?? null,
@@ -207,10 +216,11 @@ function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}) {
   }
 
   const indicators = item.indicators || {};
-  const indicatorMap = getStudyValuesMap(indicators);
-  const levels = detectLevels(indicators);
-  const daily = biasWord(indicatorMap.AI_DAILY_BIAS);
-  const weekly = biasWord(indicatorMap.AI_WEEKLY_BIAS);
+  const aiVp = resolveAiVpSnapshot(item);
+  const indicatorMap = aiVp?.values || getStudyValuesMap(indicators);
+  const levels = aiVp?.levels || detectLevels(indicators);
+  const daily = aiVp?.dailyBias || biasWord(indicatorMap.AI_DAILY_BIAS);
+  const weekly = aiVp?.weeklyBias || biasWord(indicatorMap.AI_WEEKLY_BIAS);
   const aligned = daily === weekly && daily !== "中性";
   const bars = item.ohlcv?.bars || [];
   const fakeout = summarizeYesterdayFakeouts(
