@@ -1,25 +1,15 @@
 {
   "watchlist": [
-    "BYBIT:BTCUSDT",
-    "BYBIT:ETHUSDT",
-    "BYBIT:XRPUSDT",
-    "BYBIT:SOLUSDT",
-    "BYBIT:BNBUSDT",
-    "BYBIT:ADAUSDT",
-    "BYBIT:DOGEUSDT",
-    "BYBIT:AVAXUSDT",
-    "BYBIT:LINKUSDT",
-    "BYBIT:TONUSDT",
     "VANTAGE:XAUUSD",
     "VANTAGE:XAGUSD",
     "BLACKBULL:NAS100",
-    "NASDAQ:NVDA",
-    "NASDAQ:AAPL",
-    "NASDAQ:MSFT",
-    "NASDAQ:GOOGL",
-    "NASDAQ:META",
-    "NASDAQ:TSLA",
-    "NASDAQ:AMD"
+    "BYBIT:BTCUSDT.P",
+    "BYBIT:ETHUSDT.P",
+    "BYBIT:XRPUSDT.P",
+    "BYBIT:SOLUSDT.P",
+    "BYBIT:BNBUSDT.P",
+    "BYBIT:HYPEUSDT.P",
+    "BYBIT:XLMUSDT.P"
   ],
   "default_timeframe": "5",
   "strategy": {
