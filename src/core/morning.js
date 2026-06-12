@@ -11,6 +11,7 @@ import * as chart from "./chart.js";
 import * as data from "./data.js";
 import { buildAiVpSnapshotFromStudyValues, getStudyValuesMap } from "./study_values.js";
 import { withTradingViewLock } from "./tradingview_lock.js";
+import * as replay from "./replay.js";
 import * as ui from "./ui.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -402,6 +403,13 @@ export async function runBrief({ rules_path } = {}) {
     }
 
     await assertAiVpWorkspace();
+    try {
+      const replayState = await replay.status();
+      if (replayState?.is_replay_started) {
+        await replay.stop();
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    } catch (_) {}
 
     // Save current chart state so we can restore after scanning
     let originalSymbol, originalTimeframe;
