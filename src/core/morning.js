@@ -182,6 +182,50 @@ async function waitForFreshAiVpSnapshot(previousSignature = "", timeoutMs = 2000
   return null;
 }
 
+async function readAiVpStudySnapshotById(entityId) {
+  if (!entityId) return null;
+  try {
+    const result = await data.getStudyValuesById({ entity_id: entityId });
+    return buildAiVpSnapshotFromStudyValues({ studies: [result.study] });
+  } catch (_) {
+    return null;
+  }
+}
+
+async function waitForFreshAiVpSnapshotById(entityId, previousSignature = "", timeoutMs = 20000) {
+  const start = Date.now();
+  let lastSignature = null;
+  let stableCount = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    const snapshot = await readAiVpStudySnapshotById(entityId);
+    const signature = aiVpSnapshotSignature(snapshot);
+    if (!snapshot || !signature) {
+      stableCount = 0;
+      lastSignature = null;
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
+    if (previousSignature && signature === previousSignature) {
+      stableCount = 0;
+      lastSignature = signature;
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
+    if (signature === lastSignature) stableCount += 1;
+    else stableCount = 1;
+    lastSignature = signature;
+
+    if (stableCount >= 2) return snapshot;
+
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  return null;
+}
+
 async function waitForExactChartState(expectedSymbol, expectedTimeframe, timeoutMs = 20000) {
   const start = Date.now();
   let stableCount = 0;
@@ -380,15 +424,17 @@ export async function runBrief({ rules_path } = {}) {
         await new Promise((r) => setTimeout(r, 600));
         const stateAfter = await chart.getState();
         const aiStudy = findPrimaryAiVpStudy(stateAfter?.studies || []);
-        const aiStudyValues = aiStudy?.id
-          ? await data.getStudyValuesById({ entity_id: aiStudy.id })
-          : null;
         const stableAiVp =
-          buildAiVpSnapshotFromStudyValues(
-            aiStudyValues ? { studies: [aiStudyValues.study] } : stableIndicators,
-          ) ||
-          buildAiVpSnapshotFromStudyValues(await data.getStudyValues()) ||
+          (await waitForFreshAiVpSnapshotById(
+            aiStudy?.id,
+            aiVpSnapshotSignature(previousAiVpSnapshot),
+            20000,
+          )) ||
           null;
+
+        if (!stableAiVp) {
+          throw new Error(`AI VP snapshot unavailable for ${symbol} after study id read`);
+        }
 
         const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),
