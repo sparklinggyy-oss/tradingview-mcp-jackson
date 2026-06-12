@@ -100,6 +100,11 @@ function groupHits(hits) {
   return groups;
 }
 
+function isCurrentLevelHit(hit) {
+  const label = String(hit?.label || "").trim();
+  return label.startsWith("今日") || label.toLowerCase().includes("current");
+}
+
 function resolveAiVpSnapshot(item) {
   const snapshot = item?.ai_vp || null;
   if (!snapshot || typeof snapshot !== "object") return null;
@@ -117,15 +122,21 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
   const price = isFiniteNumber(q.last) ? q.last : isFiniteNumber(q.close) ? q.close : null;
   const triggerSummary = hits.map((hit) => hit.label).join(" / ");
   const groups = groupHits(hits);
-  const confidenceNote = isAfterBrisbaneHour(17)
-    ? "註：17:00 Brisbane 後，Developing Current VAH/VAL 參考價值較高。"
-    : "註：17:00 Brisbane 前，Developing Current VAH/VAL 仍屬低權重參考。";
+  const currentHits = hits.filter(isCurrentLevelHit);
+  const historicalHits = hits.filter((hit) => !isCurrentLevelHit(hit));
+  const hasCurrentHit = currentHits.length > 0;
+  const confidenceNote = hasCurrentHit
+    ? (isAfterBrisbaneHour(17)
+        ? "註：本訊號涉及 Developing Current VAH/VAL，17:00 Brisbane 後參考價值較高。"
+        : "註：本訊號涉及 Developing Current VAH/VAL，17:00 Brisbane 前僅作低權重觀察；PD/2D/PW/2W 仍正常有效。")
+    : "註：本訊號僅涉及 PD/2D/PW/2W 等固定位，正常有效。";
 
   const lines = [
     `${item.symbol}`,
     `週偏見${weeklyWord} / 日偏見${dailyWord}${aligned ? "，方向一致" : "，方向不一致"}`,
     price === null ? null : `現價 ${formatPrice(price)}`,
     `已 fakeout ${triggerSummary}，請人工盯盤。`,
+    hasCurrentHit && !isAfterBrisbaneHour(17) ? "觀察級：Current VAH/VAL 低權重" : null,
   ].filter(Boolean);
 
   for (const [opportunity, list] of groups.entries()) {
@@ -168,7 +179,7 @@ function toFakeoutEvents(item, indicatorMap, levels, hits, bar) {
     brisbane_time: brisbaneTimestampString(barTime),
     source_snapshot: snapshotSource,
     label: hit.label,
-    confidence: isAfterBrisbaneHour(17, barTime) ? "normal" : "low",
+    confidence: isCurrentLevelHit(hit) && !isAfterBrisbaneHour(17) ? "low" : "normal",
   }));
 }
 

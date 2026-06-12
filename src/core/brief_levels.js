@@ -167,6 +167,7 @@ export function summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias) 
 
 export function summarizeYesterdayFakeoutsFromEvents(events) {
   const labels = [...new Set((Array.isArray(events) ? events : [])
+    .filter((event) => String(event?.confidence || "").trim() !== "low")
     .map((event) => String(event?.label || "").trim())
     .filter(Boolean))];
   if (labels.length > 0) {
