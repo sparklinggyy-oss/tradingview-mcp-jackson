@@ -420,13 +420,11 @@ export async function runBrief({ rules_path } = {}) {
           throw new Error(`Chart did not settle on ${symbol} @ ${default_timeframe}`);
         }
 
-        const stableIndicators = await waitForStableStudyValues(15000);
         await new Promise((r) => setTimeout(r, 600));
         const stateAfter = await chart.getState();
         const aiStudy = findPrimaryAiVpStudy(stateAfter?.studies || []);
-        const liveAiVp = buildAiVpSnapshotFromStudyValues(stableIndicators);
         const stableAiVp =
-          liveAiVp ||
+          (await readAiVpStudySnapshotById(aiStudy?.id)) ||
           (await waitForFreshAiVpSnapshotById(
             aiStudy?.id,
             aiVpSnapshotSignature(previousAiVpSnapshot),
