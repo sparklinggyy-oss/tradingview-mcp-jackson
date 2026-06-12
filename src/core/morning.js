@@ -424,7 +424,9 @@ export async function runBrief({ rules_path } = {}) {
         await new Promise((r) => setTimeout(r, 600));
         const stateAfter = await chart.getState();
         const aiStudy = findPrimaryAiVpStudy(stateAfter?.studies || []);
+        const liveAiVp = buildAiVpSnapshotFromStudyValues(stableIndicators);
         const stableAiVp =
+          liveAiVp ||
           (await waitForFreshAiVpSnapshotById(
             aiStudy?.id,
             aiVpSnapshotSignature(previousAiVpSnapshot),
@@ -433,7 +435,7 @@ export async function runBrief({ rules_path } = {}) {
           null;
 
         if (!stableAiVp) {
-          throw new Error(`AI VP snapshot unavailable for ${symbol} after study id read`);
+          throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
         }
 
         const [state, quote, ohlcv] = await Promise.all([
