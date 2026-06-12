@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import "dotenv/config";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSession, runBrief, saveSession } from "../src/core/morning.js";
@@ -46,6 +47,78 @@ function loadTargetDate() {
 
 function hasFlag(flag) {
   return process.argv.some((arg) => arg === flag);
+}
+
+function normalizeAiVpSnapshot(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.levels && raw.values) return raw;
+
+  const levels = raw.levels || raw.level || null;
+  const values = raw.values || raw.value || null;
+  if (!levels || !values) return null;
+
+  return {
+    ...raw,
+    source: raw.source || "override",
+    levels,
+    values,
+  };
+}
+
+function loadAiVpOverrideMap() {
+  const filePath = process.env.TV_AI_VP_OVERRIDE_FILE?.trim();
+  const inlineJson = process.env.TV_AI_VP_OVERRIDE_JSON?.trim();
+  const defaultPath = resolve(PROJECT_ROOT, "snapshots", "live_ai_vp_override.json");
+  let parsed = null;
+
+  if (inlineJson) {
+    parsed = JSON.parse(inlineJson);
+  } else if (filePath) {
+    if (!existsSync(filePath)) {
+      throw new Error(`TV_AI_VP_OVERRIDE_FILE not found: ${filePath}`);
+    }
+    parsed = JSON.parse(readFileSync(filePath, "utf8"));
+  } else if (existsSync(defaultPath)) {
+    parsed = JSON.parse(readFileSync(defaultPath, "utf8"));
+  } else {
+    return null;
+  }
+
+  const map = {};
+
+  if (Array.isArray(parsed?.symbols_scanned)) {
+    for (const item of parsed.symbols_scanned) {
+      const symbol = String(item?.symbol || "").trim();
+      const snapshot = normalizeAiVpSnapshot(item?.ai_vp || item?.snapshot || item);
+      if (symbol && snapshot) map[symbol] = snapshot;
+    }
+    return map;
+  }
+
+  if (parsed && typeof parsed === "object") {
+    for (const [symbol, value] of Object.entries(parsed)) {
+      const snapshot = normalizeAiVpSnapshot(value);
+      if (snapshot) map[symbol] = snapshot;
+    }
+  }
+
+  return Object.keys(map).length ? map : null;
+}
+
+function applyAiVpOverrides(brief, overrideMap) {
+  if (!overrideMap || !brief?.symbols_scanned?.length) return brief;
+
+  const symbols_scanned = brief.symbols_scanned.map((item) => {
+    const override = overrideMap[item.symbol];
+    if (!override) return item;
+    return {
+      ...item,
+      ai_vp: override,
+      indicators: item.indicators || {},
+    };
+  });
+
+  return { ...brief, symbols_scanned };
 }
 
 function isFiniteNumber(v) {
@@ -350,9 +423,11 @@ async function main() {
   const captureOnly = hasFlag("--capture-only");
   const targetDate = loadTargetDate() || dateToBrisbaneString(new Date());
   const brief = await runBrief({ rules_path: rulesPath });
+  const overrideMap = loadAiVpOverrideMap();
+  const effectiveBrief = applyAiVpOverrides(brief, overrideMap);
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
-  const snapshot = buildSnapshotBySymbol(brief);
+  const snapshot = buildSnapshotBySymbol(effectiveBrief);
 
   if (captureOnly) {
     const mismatches = [];
@@ -374,13 +449,13 @@ async function main() {
 
   if (!telegram.enabled && !captureOnly) {
     console.error("Telegram config missing. Set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_IDS (or TELEGRAM_CHAT_ID).");
-    console.log(formatBrief(brief));
+    console.log(formatBrief(effectiveBrief));
     process.exit(1);
   }
 
   const sent = [];
   if (!captureOnly) {
-    for (const item of brief.symbols_scanned || []) {
+    for (const item of effectiveBrief.symbols_scanned || []) {
       if (process.env.DEBUG_AI_VP === "1") {
         debugAiVpSnapshot(item, "main");
       }
@@ -394,7 +469,7 @@ async function main() {
     }
   }
 
-  await saveSession({ brief: formatBrief(brief, priorLevelsBySymbol), snapshot, date: targetDate });
+  await saveSession({ brief: formatBrief(effectiveBrief, priorLevelsBySymbol), snapshot, date: targetDate });
 
   console.log(JSON.stringify({
     success: true,
