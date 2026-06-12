@@ -118,42 +118,52 @@ async function waitForStableStudyValues(timeoutMs = 15000) {
   throw new Error("Study values did not stabilize in time.");
 }
 
-async function waitForStableAiVpSnapshot(timeoutMs = 15000) {
+async function readAiVpSnapshot() {
+  const pineLabels = await data.getPineLabels({
+    study_filter: "AI VP Reader - Full Bias Levels",
+    max_labels: 5,
+  });
+  return extractAiVpSnapshotFromPineLabels(pineLabels);
+}
+
+async function waitForStableAiVpSnapshot(timeoutMs = 15000, baselineSignature = null) {
   const start = Date.now();
   let lastSignature = null;
   let stableCount = 0;
+  let changedFromBaseline = baselineSignature === null;
 
   while (Date.now() - start < timeoutMs) {
-    let pineLabels;
     try {
-      pineLabels = await data.getPineLabels({
-        study_filter: "AI VP Reader - Full Bias Levels",
-        max_labels: 5,
-      });
+      const snapshot = await readAiVpSnapshot();
+      if (!snapshot) {
+        stableCount = 0;
+        lastSignature = null;
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+
+      const signature = Object.entries(snapshot.values || {})
+        .map(([key, value]) => `${key}:${value}`)
+        .join("|");
+
+      if (!changedFromBaseline) {
+        changedFromBaseline = signature !== baselineSignature;
+        stableCount = 0;
+        lastSignature = signature;
+        await new Promise((r) => setTimeout(r, 400));
+        continue;
+      }
+
+      if (signature === lastSignature) stableCount += 1;
+      else stableCount = 1;
+
+      lastSignature = signature;
+      if (stableCount >= 2) return snapshot;
+
+      await new Promise((r) => setTimeout(r, 400));
     } catch (_) {
       await new Promise((r) => setTimeout(r, 400));
-      continue;
     }
-
-    const snapshot = extractAiVpSnapshotFromPineLabels(pineLabels);
-    if (!snapshot) {
-      stableCount = 0;
-      lastSignature = null;
-      await new Promise((r) => setTimeout(r, 400));
-      continue;
-    }
-
-    const signature = Object.entries(snapshot.values || {})
-      .map(([key, value]) => `${key}:${value}`)
-      .join("|");
-
-    if (signature === lastSignature) stableCount += 1;
-    else stableCount = 1;
-
-    lastSignature = signature;
-    if (stableCount >= 2) return snapshot;
-
-    await new Promise((r) => setTimeout(r, 400));
   }
 
   throw new Error("AI VP label snapshot did not stabilize in time.");
@@ -344,7 +354,13 @@ export async function runBrief({ rules_path } = {}) {
         }
 
         const stableIndicators = await waitForStableStudyValues(15000);
-        const stableAiVp = await waitForStableAiVpSnapshot(15000);
+        const baselineSnapshot = await readAiVpSnapshot();
+        const baselineSignature = baselineSnapshot
+          ? Object.entries(baselineSnapshot.values || {})
+              .map(([key, value]) => `${key}:${value}`)
+              .join("|")
+          : null;
+        const stableAiVp = await waitForStableAiVpSnapshot(15000, baselineSignature);
 
         const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),
