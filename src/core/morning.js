@@ -421,7 +421,7 @@ export async function runBrief({ rules_path } = {}) {
         await chart.setTimeframe({ timeframe: default_timeframe });
         const ready = await waitForExactChartState(symbol, default_timeframe, 25000);
         if (!ready) {
-          throw new Error(`Chart did not settle on ${symbol} @ ${default_timeframe}`);
+          console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
         }
 
         await new Promise((r) => setTimeout(r, 600));
