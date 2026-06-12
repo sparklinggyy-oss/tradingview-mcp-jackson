@@ -137,12 +137,10 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
     lines.push(`觸發K線 ${new Date(toDateMillis(bar.time || bar.timestamp)).toLocaleString("en-GB", { timeZone: "Australia/Brisbane" })} Brisbane`);
   }
 
-  lines.push(
-    `PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)} | ` +
-      `2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)} | ` +
-      `PW ${formatPrice(levels.pw.poc)}/${formatPrice(levels.pw.vah)}/${formatPrice(levels.pw.val)} | ` +
-      `2W ${formatPrice(levels.w2.poc)}/${formatPrice(levels.w2.vah)}/${formatPrice(levels.w2.val)}`,
-  );
+  lines.push(`PD ${formatPrice(levels.pd.poc)}/${formatPrice(levels.pd.vah)}/${formatPrice(levels.pd.val)}`);
+  lines.push(`2D ${formatPrice(levels.d2.poc)}/${formatPrice(levels.d2.vah)}/${formatPrice(levels.d2.val)}`);
+  lines.push(`PW ${formatPrice(levels.pw.poc)}/${formatPrice(levels.pw.vah)}/${formatPrice(levels.pw.val)}`);
+  lines.push(`2W ${formatPrice(levels.w2.poc)}/${formatPrice(levels.w2.vah)}/${formatPrice(levels.w2.val)}`);
   lines.push(confidenceNote);
 
   return lines.join("\n");
