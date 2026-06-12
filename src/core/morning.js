@@ -47,6 +47,7 @@ const REQUIRED_STUDY_KEYS = [
   "AI_2W_VAH",
   "AI_2W_VAL",
 ];
+const DEFAULT_AI_VP_OVERRIDE_FILE = resolve(PROJECT_ROOT, "snapshots", "live_ai_vp_override.json");
 
 function brisbaneDateString(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
@@ -81,6 +82,41 @@ function hasRequiredStudyKeys(studyMap) {
     const value = studyMap?.[key];
     return value !== undefined && value !== null && value !== "";
   });
+}
+
+function normalizeAiVpSnapshot(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  if (raw.levels && raw.values) return raw;
+
+  const levels = raw.levels || raw.level || null;
+  const values = raw.values || raw.value || null;
+  if (!levels || !values) return null;
+
+  return {
+    ...raw,
+    source: raw.source || "override",
+    levels,
+    values,
+  };
+}
+
+function loadAiVpOverrideMap() {
+  const filePath = process.env.TV_AI_VP_OVERRIDE_FILE?.trim() || DEFAULT_AI_VP_OVERRIDE_FILE;
+  if (!filePath || !existsSync(filePath)) return null;
+
+  try {
+    const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const map = {};
+    for (const [symbol, value] of Object.entries(parsed)) {
+      const snapshot = normalizeAiVpSnapshot(value);
+      if (symbol && snapshot) map[symbol] = snapshot;
+    }
+    return Object.keys(map).length ? map : null;
+  } catch {
+    return null;
+  }
 }
 
 function aiVpSnapshotSignature(snapshot) {
@@ -418,6 +454,7 @@ export async function runBrief({ rules_path } = {}) {
   return withTradingViewLock(async () => {
     const { rules, path: loadedFrom } = loadRules(rules_path);
     const { watchlist = [], default_timeframe = "240" } = rules;
+    const overrideMap = loadAiVpOverrideMap();
 
     if (!watchlist.length) {
       throw new Error(
@@ -463,8 +500,8 @@ export async function runBrief({ rules_path } = {}) {
         } catch (_) {}
 
         await new Promise((r) => setTimeout(r, 1000));
-        const stableIndicators = await waitForStableStudyValues(25000);
-        const stableAiVp = buildAiVpSnapshotFromStudyValues(stableIndicators);
+        const overrideAiVp = overrideMap?.[symbol] || null;
+        const stableAiVp = overrideAiVp || buildAiVpSnapshotFromStudyValues(await waitForStableStudyValues(25000));
 
         if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
