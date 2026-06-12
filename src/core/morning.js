@@ -130,11 +130,11 @@ async function waitForStableStudyValues(timeoutMs = 15000) {
     else stableCount = 1;
     lastSignature = signature;
 
-    if (stableCount >= 2) {
+    if (stableCount >= 3) {
       return indicators;
     }
 
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 800));
   }
 
   throw new Error("Study values did not stabilize in time.");
@@ -416,7 +416,6 @@ export async function runBrief({ rules_path } = {}) {
     for (const symbol of watchlist) {
       try {
         await assertAiVpWorkspace();
-        const previousAiVpSnapshot = await readAiVpStudySnapshot();
         await chart.setSymbol({ symbol });
         await chart.setTimeframe({ timeframe: default_timeframe });
         const ready = await waitForExactChartState(symbol, default_timeframe, 25000);
@@ -424,14 +423,9 @@ export async function runBrief({ rules_path } = {}) {
           console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
         }
 
-        await new Promise((r) => setTimeout(r, 600));
-        const stateAfter = await chart.getState();
-        const aiStudy = findPrimaryAiVpStudy(stateAfter?.studies || []);
-        const stableAiVp = await waitForFreshAiVpSnapshotById(
-          aiStudy?.id,
-          aiVpSnapshotSignature(previousAiVpSnapshot),
-          25000,
-        );
+        await new Promise((r) => setTimeout(r, 1000));
+        const stableIndicators = await waitForStableStudyValues(25000);
+        const stableAiVp = buildAiVpSnapshotFromStudyValues(stableIndicators);
 
         if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
