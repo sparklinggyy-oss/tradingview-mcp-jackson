@@ -343,19 +343,25 @@ async function assertAiVpWorkspace() {
   throw lastError || new Error("Unknown AI VP workspace check failure");
 }
 
-async function focusPrimaryTradingViewTab() {
-  try {
-    const tabs = await tab.list();
-    if (!tabs?.tabs?.length) return;
-    const primary = tabs.tabs[0];
-    if (!primary) return;
-    const currentTarget = await getTargetInfo().catch(() => null);
-    if (currentTarget?.id === primary.id) return;
-    await tab.switchTab({ index: 0 });
+async function focusPinnedTradingViewTab() {
+  const pinnedTargetId = process.env.TV_MORNING_TARGET_ID?.trim();
+  if (!pinnedTargetId) return;
+
+  const tabs = await tab.list();
+  const targetIndex = tabs?.tabs?.findIndex((t) => t.id === pinnedTargetId) ?? -1;
+  if (targetIndex < 0) {
+    throw new Error(
+      `Pinned morning target not found: ${pinnedTargetId}. Use tab_list to refresh TV_MORNING_TARGET_ID.`,
+    );
+  }
+
+  const currentTarget = await getTargetInfo().catch(() => null);
+  if (currentTarget?.id !== pinnedTargetId) {
+    await tab.switchTab({ index: targetIndex });
     await disconnect().catch(() => {});
-    await connectToTarget(primary.id);
+    await connectToTarget(pinnedTargetId);
     await new Promise((r) => setTimeout(r, 1000));
-  } catch (_) {}
+  }
 }
 
 function assertSafeRulesPath(p) {
@@ -419,7 +425,7 @@ export async function runBrief({ rules_path } = {}) {
       );
     }
 
-    await focusPrimaryTradingViewTab();
+    await focusPinnedTradingViewTab();
     await assertAiVpWorkspace();
     try {
       const replayState = await replay.status();
