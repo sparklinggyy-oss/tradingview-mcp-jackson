@@ -423,6 +423,13 @@ export async function runBrief({ rules_path } = {}) {
           console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
         }
 
+        try {
+          await chart.goToRealtime();
+        } catch (_) {}
+        try {
+          await ui.keyboard({ key: "End" });
+        } catch (_) {}
+
         await new Promise((r) => setTimeout(r, 1000));
         const stableIndicators = await waitForStableStudyValues(25000);
         const stableAiVp = buildAiVpSnapshotFromStudyValues(stableIndicators);

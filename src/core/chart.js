@@ -53,6 +53,26 @@ export async function setTimeframe({ timeframe }) {
   return { success: true, timeframe, chart_ready: ready };
 }
 
+export async function goToRealtime() {
+  const result = await evaluate(`
+    (function() {
+      var chart = ${CHART_API};
+      var actions = [];
+      try {
+        var ts = chart._chartWidget && chart._chartWidget.model && chart._chartWidget.model().timeScale();
+        if (ts) {
+          if (typeof ts.scrollToRealTime === 'function') { ts.scrollToRealTime(); actions.push('scrollToRealTime'); }
+          else if (typeof ts.goToRealTime === 'function') { ts.goToRealTime(); actions.push('goToRealTime'); }
+          else if (typeof ts.setRightOffset === 'function') { ts.setRightOffset(0); actions.push('setRightOffset(0)'); }
+        }
+      } catch(e) { actions.push('error:' + e.message); }
+      return { actions: actions };
+    })()
+  `);
+  await new Promise((r) => setTimeout(r, 500));
+  return { success: true, actions: result?.actions || [] };
+}
+
 export async function setType({ chart_type }) {
   const typeMap = {
     'Bars': 0, 'Candles': 1, 'Line': 2, 'Area': 3,
