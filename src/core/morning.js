@@ -431,6 +431,35 @@ export async function runBrief({ rules_path } = {}) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
         }
 
+        if (process.env.DEBUG_AI_VP === "1" && String(symbol).includes("BTCUSDT")) {
+          try {
+            const rawStudies = await data.getStudyValues();
+            const aiStudies = (rawStudies?.studies || [])
+              .filter((s) =>
+                String(s?.name || "")
+                  .toLowerCase()
+                  .includes("ai vp reader - full bias levels"),
+              )
+              .map((s) => {
+                const snap = buildAiVpSnapshotFromStudyValues({ studies: [s] });
+                return {
+                  id: s.id || null,
+                  name: s.name || null,
+                  daily: snap?.dailyBiasRaw ?? null,
+                  weekly: snap?.weeklyBiasRaw ?? null,
+                  cur: snap?.levels?.cur || null,
+                  pd: snap?.levels?.pd || null,
+                  d2: snap?.levels?.d2 || null,
+                  pw: snap?.levels?.pw || null,
+                  w2: snap?.levels?.w2 || null,
+                };
+              });
+            console.log(`[DEBUG_AI_VP] ${symbol} raw_ai_studies: ${JSON.stringify(aiStudies)}`);
+          } catch (e) {
+            console.log(`[DEBUG_AI_VP] ${symbol} raw_ai_studies error: ${e.message}`);
+          }
+        }
+
         const [state, quote, ohlcv] = await Promise.all([
           chart.getState(),
           data.getQuote({}),
