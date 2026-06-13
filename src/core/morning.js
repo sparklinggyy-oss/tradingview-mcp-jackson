@@ -348,6 +348,37 @@ function findPrimaryAiVpStudy(studies) {
   return normalized[normalized.length - 1] || null;
 }
 
+async function waitForPrimaryAiVpStudyReady(expectedSymbol, timeoutMs = 40000, paneIndex = 0) {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    let state;
+    try {
+      state = await pane.getState({ index: paneIndex });
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 500));
+      continue;
+    }
+
+    if (!matchesExpectedSymbol(state?.symbol, expectedSymbol)) {
+      await new Promise((r) => setTimeout(r, 500));
+      continue;
+    }
+
+    try {
+      const chartState = await chart.getState();
+      const aiStudy = findPrimaryAiVpStudy(chartState?.studies || []);
+      if (aiStudy?.id && matchesExpectedSymbol(state?.symbol, expectedSymbol)) {
+        return aiStudy.id;
+      }
+    } catch (_) {}
+
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  return null;
+}
+
 async function assertAiVpWorkspace() {
   if (!REQUIRED_STUDIES.length) return;
 
@@ -602,10 +633,9 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
 
         let stableAiVp = null;
         try {
-          const currentChartState = await chart.getState();
-          const aiStudy = findPrimaryAiVpStudy(currentChartState?.studies || []);
-          if (aiStudy?.id) {
-            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudy.id, lastAiVpSignature, 40000);
+          const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
+          if (aiStudyId) {
+            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudyId, lastAiVpSignature, 40000);
           }
         } catch (_) {}
 
