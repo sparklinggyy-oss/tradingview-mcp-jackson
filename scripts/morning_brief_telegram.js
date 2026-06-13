@@ -18,7 +18,11 @@ import {
   getTelegramConfigForKind,
   sendTelegramBroadcast,
 } from "../src/core/telegram.js";
-import { loadFakeoutEvents } from "../src/core/fakeout_log.js";
+import {
+  eventBrisbaneDateString,
+  loadFakeoutEvents,
+  shiftBrisbaneDateString,
+} from "../src/core/fakeout_log.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
@@ -331,6 +335,37 @@ function eventsBySymbolFromSession(session) {
   return groups;
 }
 
+function loadSummaryEventsForDate(summaryDate) {
+  const candidates = [
+    shiftBrisbaneDateString(summaryDate, -1),
+    summaryDate,
+    shiftBrisbaneDateString(summaryDate, 1),
+  ].filter(Boolean);
+
+  const events = [];
+  const seen = new Set();
+  for (const date of candidates) {
+    const result = loadFakeoutEvents({ date });
+    for (const event of result.events || []) {
+      const key = JSON.stringify({
+        symbol: event?.symbol || "",
+        label: event?.label || "",
+        level_set: event?.level_set || "",
+        level_side: event?.level_side || "",
+        bar_time: event?.bar_time ?? "",
+        date: event?.date || "",
+      });
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (eventBrisbaneDateString(event) === summaryDate) {
+        events.push(event);
+      }
+    }
+  }
+
+  return { date: summaryDate, events };
+}
+
 function formatSymbolBrief(item, generatedAt, priorLevelsBySymbol = {}, priorEventsBySymbol = {}) {
   if (item.error) {
     return `${item.symbol} | ERROR: ${item.error}`;
@@ -439,7 +474,9 @@ async function main() {
   const effectiveBrief = applyAiVpOverrides(brief, overrideMap);
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
-  const priorEvents = loadFakeoutEvents({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
+  const priorEvents = loadSummaryEventsForDate(
+    previousDateString(new Date(`${targetDate}T12:00:00Z`)),
+  );
   const priorEventsBySymbol = eventsBySymbolFromSession(priorEvents);
   const snapshot = buildSnapshotBySymbol(effectiveBrief);
 

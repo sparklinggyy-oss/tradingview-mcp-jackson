@@ -29,6 +29,22 @@ export function previousBrisbaneDateString(reference = new Date()) {
   return utc.toISOString().slice(0, 10);
 }
 
+export function shiftBrisbaneDateString(dateString, deltaDays) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateString || ""))) return null;
+  const [year, month, day] = String(dateString).split("-").map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  utc.setUTCDate(utc.getUTCDate() + Number(deltaDays || 0));
+  return utc.toISOString().slice(0, 10);
+}
+
+export function eventBrisbaneDateString(event) {
+  return (
+    event?.date ||
+    event?.brisbane_date ||
+    brisbaneDateString(event?.bar_time || event?.event_time || new Date())
+  );
+}
+
 export function brisbaneTimestampString(value) {
   if (value === null || value === undefined) return null;
   const n = Number(value);
@@ -47,10 +63,7 @@ export function brisbaneTimestampString(value) {
 }
 
 export function appendFakeoutEvent(event) {
-  const dateStr =
-    event?.date ||
-    event?.brisbane_date ||
-    brisbaneDateString(event?.bar_time || event?.event_time || new Date());
+  const dateStr = eventBrisbaneDateString(event);
 
   mkdirSync(FAKEOUTS_DIR, { recursive: true });
   const filePath = join(FAKEOUTS_DIR, `${dateStr}.jsonl`);
@@ -97,4 +110,3 @@ export function groupFakeoutEventsBySymbol(events) {
   }
   return groups;
 }
-

@@ -168,7 +168,23 @@ export function summarizeYesterdayFakeouts(bars, levels, dailyBias, weeklyBias) 
 export function summarizeYesterdayFakeoutsFromEvents(events) {
   const labels = [...new Set((Array.isArray(events) ? events : [])
     .filter((event) => String(event?.confidence || "").trim() !== "low")
-    .map((event) => String(event?.label || "").trim())
+    .map((event) => {
+      const label = String(
+        event?.label ||
+        event?.level_label ||
+        event?.fakeout_label ||
+        event?.opportunity ||
+        "",
+      ).trim();
+      if (label) return label;
+
+      const levelSet = String(event?.level_set || "").trim().toUpperCase();
+      const levelSide = String(event?.level_side || "").trim().toUpperCase();
+      if (levelSet && levelSide) return `${levelSet} ${levelSide}`;
+      if (levelSet) return levelSet;
+      if (levelSide) return levelSide;
+      return "";
+    })
     .filter(Boolean))];
   if (labels.length > 0) {
     return `昨日已 fakeout：${labels.join(" / ")}`;
