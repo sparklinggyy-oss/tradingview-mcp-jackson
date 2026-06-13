@@ -604,7 +604,18 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           );
         }
 
-        const stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 25000, 0);
+        let stableAiVp = null;
+        try {
+          const currentChartState = await chart.getState();
+          const aiStudy = findPrimaryAiVpStudy(currentChartState?.studies || []);
+          if (aiStudy?.id) {
+            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudy.id, lastAiVpSignature, 25000);
+          }
+        } catch (_) {}
+
+        if (!stableAiVp) {
+          stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 25000, 0);
+        }
 
         if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
