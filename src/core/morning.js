@@ -556,7 +556,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           } catch (_) {
             await chart.setSymbol({ symbol });
           }
-          ready = await waitForExactChartState(symbol, default_timeframe, 25000, 0);
+          ready = await waitForExactChartState(symbol, default_timeframe, 40000, 0);
           if (!ready) {
             console.warn(`Chart did not fully settle on ${symbol} @ ${default_timeframe}; continuing with live snapshot read`);
           }
@@ -568,7 +568,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
             await ui.keyboard({ key: "End" });
           } catch (_) {}
 
-          await new Promise((r) => setTimeout(r, 6000));
+          await new Promise((r) => setTimeout(r, 5000));
           const currentState = await pane.getState({ index: 0 }).catch(() => null);
           settledState = currentState;
           normalizedSymbol = currentState?.symbol || symbol;
@@ -605,12 +605,12 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           const currentChartState = await chart.getState();
           const aiStudy = findPrimaryAiVpStudy(currentChartState?.studies || []);
           if (aiStudy?.id) {
-            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudy.id, lastAiVpSignature, 25000);
+            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudy.id, lastAiVpSignature, 40000);
           }
         } catch (_) {}
 
         if (!stableAiVp) {
-          stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 25000, 0);
+          stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 40000, 0);
         }
 
         if (!stableAiVp) {
