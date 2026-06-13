@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import "dotenv/config";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getSession, runBrief, saveSession } from "../src/core/morning.js";
@@ -20,8 +20,8 @@ import {
 } from "../src/core/telegram.js";
 import {
   eventBrisbaneDateString,
+  getFakeoutsDir,
   loadFakeoutEvents,
-  shiftBrisbaneDateString,
 } from "../src/core/fakeout_log.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -336,15 +336,14 @@ function eventsBySymbolFromSession(session) {
 }
 
 function loadSummaryEventsForDate(summaryDate) {
-  const candidates = [
-    shiftBrisbaneDateString(summaryDate, -1),
-    summaryDate,
-    shiftBrisbaneDateString(summaryDate, 1),
-  ].filter(Boolean);
-
   const events = [];
   const seen = new Set();
-  for (const date of candidates) {
+  const dir = getFakeoutsDir();
+  if (!existsSync(dir)) return { date: summaryDate, events };
+
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    const date = file.replace(/\.jsonl$/i, "");
     const result = loadFakeoutEvents({ date });
     for (const event of result.events || []) {
       const key = JSON.stringify({

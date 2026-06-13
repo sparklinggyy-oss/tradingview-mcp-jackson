@@ -4,6 +4,17 @@ import { join } from "node:path";
 
 const FAKEOUTS_DIR = join(homedir(), ".tradingview-mcp", "fakeouts");
 
+export function getFakeoutsDir() {
+  return FAKEOUTS_DIR;
+}
+
+export function normalizeTimestampMs(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return n < 1e12 ? n * 1000 : n;
+}
+
 function brisbaneDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-AU", {
     timeZone: "Australia/Brisbane",
@@ -38,18 +49,18 @@ export function shiftBrisbaneDateString(dateString, deltaDays) {
 }
 
 export function eventBrisbaneDateString(event) {
+  const barTime = normalizeTimestampMs(event?.bar_time);
+  const eventTime = normalizeTimestampMs(event?.event_time);
   return (
     event?.date ||
     event?.brisbane_date ||
-    brisbaneDateString(event?.bar_time || event?.event_time || new Date())
+    brisbaneDateString(barTime || eventTime || new Date())
   );
 }
 
 export function brisbaneTimestampString(value) {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  if (!Number.isFinite(n)) return null;
-  const ms = n < 1e12 ? n * 1000 : n;
+  const ms = normalizeTimestampMs(value);
+  if (ms === null) return null;
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Australia/Brisbane",
     year: "numeric",
