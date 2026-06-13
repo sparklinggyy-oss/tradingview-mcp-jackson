@@ -518,6 +518,8 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
         let ready = false;
         let normalizedSymbol = null;
         let settledState = null;
+        let symbolMatched = false;
+        let lastLoadedSymbol = null;
 
         for (let attempt = 0; attempt < 8; attempt += 1) {
           try {
@@ -543,6 +545,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           const currentState = await pane.getState({ index: 0 }).catch(() => null);
           settledState = currentState;
           normalizedSymbol = currentState?.symbol || symbol;
+          lastLoadedSymbol = normalizedSymbol;
           const normalizedTicker = String(normalizedSymbol).split(":").pop().toUpperCase();
           const expectedTicker = String(symbol).split(":").pop().toUpperCase();
           const symbolMatches =
@@ -551,7 +554,10 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
               normalizedTicker === expectedTicker ||
               String(normalizedSymbol).toUpperCase().endsWith(`:${expectedTicker}`));
 
-          if (symbolMatches) break;
+          if (symbolMatches) {
+            symbolMatched = true;
+            break;
+          }
 
           if (attempt < 7) {
             console.warn(
@@ -560,6 +566,12 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
             await new Promise((r) => setTimeout(r, 3000));
             continue;
           }
+        }
+
+        if (!symbolMatched) {
+          throw new Error(
+            `Chart symbol mismatch after load: expected ${symbol}, got ${lastLoadedSymbol || normalizedSymbol || "unknown"}`,
+          );
         }
 
         const stableAiVp = buildAiVpSnapshotFromStudyValues(await waitForStableStudyValues(25000));
