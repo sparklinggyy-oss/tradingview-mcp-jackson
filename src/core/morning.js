@@ -720,13 +720,7 @@ async function runMorningBriefImpl({
           if (!stableAiVp) {
             stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 40000, 0);
           }
-
-          if (!stableAiVp && attempt < maxSymbolAttempts - 1) {
-            console.warn(
-              `AI VP snapshot not ready on ${symbol} (attempt ${attempt + 1}/${maxSymbolAttempts}); retrying`,
-            );
-            continue;
-          }
+          if (!stableAiVp) continue;
         } else {
           try {
             const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
