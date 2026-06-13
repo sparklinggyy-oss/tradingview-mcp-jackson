@@ -174,7 +174,7 @@ export async function setSymbol({ index, symbol }) {
       var chart = all[${idx}];
       return new Promise(function(resolve) {
         chart.setSymbol('${escaped}', {});
-        setTimeout(resolve, 500);
+        setTimeout(resolve, 5000);
       });
     })()
   `);
