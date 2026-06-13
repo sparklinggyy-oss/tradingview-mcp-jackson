@@ -11,6 +11,7 @@ import * as chart from "./chart.js";
 import * as data from "./data.js";
 import { buildAiVpSnapshotFromStudyValues, getStudyValuesMap } from "./study_values.js";
 import { withTradingViewLock } from "./tradingview_lock.js";
+import { isAfterBrisbaneHour } from "./brief_levels.js";
 import * as replay from "./replay.js";
 import * as tab from "./tab.js";
 import * as pane from "./pane.js";
@@ -459,6 +460,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
     const { rules, path: loadedFrom } = loadRules(rules_path);
     const { watchlist = [], default_timeframe = "240" } = rules;
     const overrideMap = loadAiVpOverrideMap();
+    const allowOverrideSnapshot = !isAfterBrisbaneHour(10, new Date());
     const symbolSwitchDelayMs = Number.isFinite(Number(symbol_switch_delay_ms))
       ? Number(symbol_switch_delay_ms)
       : DEFAULT_MORNING_SYMBOL_SWITCH_DELAY_MS;
@@ -563,7 +565,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           }
         }
 
-        const overrideAiVp = overrideMap?.[symbol] || null;
+        const overrideAiVp = allowOverrideSnapshot ? overrideMap?.[symbol] || null : null;
         const stableAiVp = overrideAiVp || buildAiVpSnapshotFromStudyValues(await waitForStableStudyValues(25000));
 
         if (!stableAiVp) {
