@@ -568,7 +568,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
             await ui.keyboard({ key: "End" });
           } catch (_) {}
 
-          await new Promise((r) => setTimeout(r, 1000));
+          await new Promise((r) => setTimeout(r, 6000));
           const currentState = await pane.getState({ index: 0 }).catch(() => null);
           settledState = currentState;
           normalizedSymbol = currentState?.symbol || symbol;
