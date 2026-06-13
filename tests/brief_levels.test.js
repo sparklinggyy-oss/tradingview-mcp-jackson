@@ -36,6 +36,13 @@ describe("brief_levels — fakeout summaries", () => {
       eventBrisbaneDateString({ date: "2026-06-12" }),
       "2026-06-12",
     );
+    assert.equal(
+      eventBrisbaneDateString({
+        date: "1970-01-22",
+        bar_time: 1718179200,
+      }),
+      "2024-06-12",
+    );
     assert.equal(shiftBrisbaneDateString("2026-06-12", -1), "2026-06-11");
     assert.equal(shiftBrisbaneDateString("2026-06-12", 1), "2026-06-13");
   });

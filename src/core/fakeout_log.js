@@ -48,12 +48,19 @@ export function shiftBrisbaneDateString(dateString, deltaDays) {
   return utc.toISOString().slice(0, 10);
 }
 
+function normalizeStoredDateString(value) {
+  const dateStr = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+  if (dateStr.startsWith("1970-")) return null;
+  return dateStr;
+}
+
 export function eventBrisbaneDateString(event) {
   const barTime = normalizeTimestampMs(event?.bar_time);
   const eventTime = normalizeTimestampMs(event?.event_time);
+  const storedDate = normalizeStoredDateString(event?.date) || normalizeStoredDateString(event?.brisbane_date);
   return (
-    event?.date ||
-    event?.brisbane_date ||
+    storedDate ||
     brisbaneDateString(barTime || eventTime || new Date())
   );
 }
