@@ -4,7 +4,7 @@ import "dotenv/config";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getSession, runBrief, saveSession } from "../src/core/morning.js";
+import { getSession, runStrictBrief, saveSession } from "../src/core/morning.js";
 import {
   biasWord,
   detectLevels,
@@ -412,7 +412,7 @@ async function main() {
   const rulesPath = loadRulesPath();
   const captureOnly = hasFlag("--capture-only");
   const targetDate = loadTargetDate() || dateToBrisbaneString(new Date());
-  const brief = await runBrief({ rules_path: rulesPath });
+  const brief = await runStrictBrief({ rules_path: rulesPath });
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
   const priorEvents = loadSummaryEventsForDate(

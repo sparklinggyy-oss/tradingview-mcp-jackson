@@ -379,6 +379,79 @@ async function waitForPrimaryAiVpStudyReady(expectedSymbol, timeoutMs = 40000, p
   return null;
 }
 
+async function waitForPrimaryAiVpSnapshot(expectedSymbol, timeoutMs = 60000, paneIndex = 0) {
+  const start = Date.now();
+  let lastStudyId = null;
+  let lastSignature = null;
+  let stableCount = 0;
+
+  while (Date.now() - start < timeoutMs) {
+    let state = null;
+    try {
+      state = await pane.getState({ index: paneIndex });
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    if (!matchesExpectedSymbol(state?.symbol, expectedSymbol)) {
+      lastStudyId = null;
+      lastSignature = null;
+      stableCount = 0;
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    let chartState = null;
+    try {
+      chartState = await chart.getState();
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    const aiStudy = findPrimaryAiVpStudy(chartState?.studies || []);
+    if (!aiStudy?.id) {
+      lastStudyId = null;
+      lastSignature = null;
+      stableCount = 0;
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    if (lastStudyId !== aiStudy.id) {
+      lastStudyId = aiStudy.id;
+      lastSignature = null;
+      stableCount = 0;
+    }
+
+    let snapshot = null;
+    try {
+      snapshot = await readAiVpStudySnapshotById(aiStudy.id);
+    } catch (_) {
+      snapshot = null;
+    }
+
+    const signature = aiVpSnapshotSignature(snapshot);
+    if (!snapshot || !signature) {
+      lastSignature = null;
+      stableCount = 0;
+      await new Promise((r) => setTimeout(r, 400));
+      continue;
+    }
+
+    if (signature === lastSignature) stableCount += 1;
+    else stableCount = 1;
+    lastSignature = signature;
+
+    if (stableCount >= 2) return snapshot;
+
+    await new Promise((r) => setTimeout(r, 400));
+  }
+
+  return null;
+}
+
 async function assertAiVpWorkspace() {
   if (!REQUIRED_STUDIES.length) return;
 
@@ -510,7 +583,11 @@ function loadRules(rulesPath) {
   );
 }
 
-export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
+async function runMorningBriefImpl({
+  rules_path,
+  symbol_switch_delay_ms,
+  snapshot_read_mode = "legacy",
+} = {}) {
   return withTradingViewLock(async () => {
     const { rules, path: loadedFrom } = loadRules(rules_path);
     const { watchlist = [], default_timeframe = "240" } = rules;
@@ -632,15 +709,19 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
         }
 
         let stableAiVp = null;
-        try {
-          const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
-          if (aiStudyId) {
-            stableAiVp = await waitForFreshAiVpSnapshotById(aiStudyId, lastAiVpSignature, 40000);
-          }
-        } catch (_) {}
+        if (snapshot_read_mode === "strict") {
+          stableAiVp = await waitForPrimaryAiVpSnapshot(symbol, 60000, 0);
+        } else {
+          try {
+            const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
+            if (aiStudyId) {
+              stableAiVp = await waitForFreshAiVpSnapshotById(aiStudyId, lastAiVpSignature, 40000);
+            }
+          } catch (_) {}
 
-        if (!stableAiVp) {
-          stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 40000, 0);
+          if (!stableAiVp) {
+            stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 40000, 0);
+          }
         }
 
         if (!stableAiVp) {
@@ -747,6 +828,14 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
       ].join(" "),
     };
   }, { name: "morning-brief", waitMs: 10 * 60 * 1000 });
+}
+
+export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
+  return runMorningBriefImpl({ rules_path, symbol_switch_delay_ms, snapshot_read_mode: "legacy" });
+}
+
+export async function runStrictBrief({ rules_path, symbol_switch_delay_ms } = {}) {
+  return runMorningBriefImpl({ rules_path, symbol_switch_delay_ms, snapshot_read_mode: "strict" });
 }
 
 export function saveSession({ brief, snapshot, date } = {}) {
