@@ -105,6 +105,14 @@ function isCurrentLevelHit(hit) {
   return label.startsWith("今日") || label.toLowerCase().includes("current");
 }
 
+function displayHitLabel(hit) {
+  const label = String(hit?.label || "").trim();
+  if (!label) return "";
+  if (/^今日\s+VAH$/i.test(label)) return "Current VAH";
+  if (/^今日\s+VAL$/i.test(label)) return "Current VAL";
+  return label.replace(/^今日\s+/i, "Current ");
+}
+
 function resolveAiVpSnapshot(item) {
   const snapshot = item?.ai_vp || null;
   if (!snapshot || typeof snapshot !== "object") return null;
@@ -120,7 +128,7 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
   const aligned = dailyWord === weeklyWord && dailyWord !== "中性";
   const q = item.quote || {};
   const price = isFiniteNumber(q.last) ? q.last : isFiniteNumber(q.close) ? q.close : null;
-  const triggerSummary = hits.map((hit) => hit.label).join(" / ");
+  const triggerSummary = hits.map(displayHitLabel).filter(Boolean).join(" / ");
   const groups = groupHits(hits);
   const currentHits = hits.filter(isCurrentLevelHit);
   const historicalHits = hits.filter((hit) => !isCurrentLevelHit(hit));
@@ -140,7 +148,7 @@ function buildAlertText(item, indicatorMap, levels, hits, bar) {
   ].filter(Boolean);
 
   for (const [opportunity, list] of groups.entries()) {
-    const labels = list.map((hit) => hit.label).join(" / ");
+    const labels = list.map(displayHitLabel).filter(Boolean).join(" / ");
     lines.push(`${opportunity}: ${labels}`);
   }
 
