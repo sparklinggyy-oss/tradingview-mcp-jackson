@@ -71,63 +71,6 @@ function normalizeAiVpSnapshot(raw) {
   };
 }
 
-function loadAiVpOverrideMap() {
-  const filePath = process.env.TV_AI_VP_OVERRIDE_FILE?.trim();
-  const inlineJson = process.env.TV_AI_VP_OVERRIDE_JSON?.trim();
-  const defaultPath = resolve(PROJECT_ROOT, "snapshots", "live_ai_vp_override.json");
-  let parsed = null;
-
-  if (inlineJson) {
-    parsed = JSON.parse(inlineJson);
-  } else if (filePath) {
-    if (!existsSync(filePath)) {
-      throw new Error(`TV_AI_VP_OVERRIDE_FILE not found: ${filePath}`);
-    }
-    parsed = JSON.parse(readFileSync(filePath, "utf8"));
-  } else if (existsSync(defaultPath)) {
-    parsed = JSON.parse(readFileSync(defaultPath, "utf8"));
-  } else {
-    return null;
-  }
-
-  const map = {};
-
-  if (Array.isArray(parsed?.symbols_scanned)) {
-    for (const item of parsed.symbols_scanned) {
-      const symbol = String(item?.symbol || "").trim();
-      const snapshot = normalizeAiVpSnapshot(item?.ai_vp || item?.snapshot || item);
-      if (symbol && snapshot) map[symbol] = snapshot;
-    }
-    return map;
-  }
-
-  if (parsed && typeof parsed === "object") {
-    for (const [symbol, value] of Object.entries(parsed)) {
-      const snapshot = normalizeAiVpSnapshot(value);
-      if (snapshot) map[symbol] = snapshot;
-    }
-  }
-
-  return Object.keys(map).length ? map : null;
-}
-
-function applyAiVpOverrides(brief, overrideMap) {
-  if (!overrideMap || !brief?.symbols_scanned?.length) return brief;
-
-  const symbols_scanned = brief.symbols_scanned.map((item) => {
-    const override = overrideMap[item.symbol];
-    if (!override) return item;
-    if (item?.ai_vp?.levels && item?.ai_vp?.values) return item;
-    return {
-      ...item,
-      ai_vp: override,
-      indicators: item.indicators || {},
-    };
-  });
-
-  return { ...brief, symbols_scanned };
-}
-
 function isFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v);
 }
@@ -470,15 +413,13 @@ async function main() {
   const captureOnly = hasFlag("--capture-only");
   const targetDate = loadTargetDate() || dateToBrisbaneString(new Date());
   const brief = await runBrief({ rules_path: rulesPath });
-  const overrideMap = loadAiVpOverrideMap();
-  const effectiveBrief = applyAiVpOverrides(brief, overrideMap);
   const priorSession = getSession({ date: previousDateString(new Date(`${targetDate}T12:00:00Z`)) });
   const priorLevelsBySymbol = levelsBySymbolFromSession(priorSession);
   const priorEvents = loadSummaryEventsForDate(
     previousDateString(new Date(`${targetDate}T12:00:00Z`)),
   );
   const priorEventsBySymbol = eventsBySymbolFromSession(priorEvents);
-  const snapshot = buildSnapshotBySymbol(effectiveBrief);
+  const snapshot = buildSnapshotBySymbol(brief);
 
   if (captureOnly) {
     const mismatches = [];
@@ -506,7 +447,7 @@ async function main() {
 
   const sent = [];
   if (!captureOnly) {
-    for (const item of effectiveBrief.symbols_scanned || []) {
+    for (const item of brief.symbols_scanned || []) {
       if (process.env.DEBUG_AI_VP === "1") {
         debugAiVpSnapshot(item, "main");
       }
@@ -521,7 +462,7 @@ async function main() {
   }
 
   await saveSession({
-    brief: formatBrief(effectiveBrief, priorLevelsBySymbol, priorEventsBySymbol),
+    brief: formatBrief(brief, priorLevelsBySymbol, priorEventsBySymbol),
     snapshot,
     date: targetDate,
   });
