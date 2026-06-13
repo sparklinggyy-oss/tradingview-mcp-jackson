@@ -63,11 +63,11 @@ function getAlertPlan(levels) {
   ]);
 
   const counterWeekShort = () => ([
-    { label: "今日 VAH", level: levels.cur.vah, opportunity: "短空機會" },
+    { label: "Current VAH", level: levels.cur.vah, opportunity: "短空機會" },
   ]);
 
   const counterWeekLong = () => ([
-    { label: "今日 VAL", level: levels.cur.val, opportunity: "短多機會" },
+    { label: "Current VAL", level: levels.cur.val, opportunity: "短多機會" },
   ]);
 
   const reversalLong = () => ([
