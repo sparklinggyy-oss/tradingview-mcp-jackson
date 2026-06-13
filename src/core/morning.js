@@ -536,7 +536,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
 
     const results = [];
     let lastAiVpSignature = "";
-    const maxSymbolAttempts = Math.max(Number(watchlist.length) || 0, 1);
+    const maxSymbolAttempts = Math.max((Number(watchlist.length) || 0) * 2, 1);
 
     for (let idx = 0; idx < watchlist.length; idx += 1) {
       const symbol = watchlist[idx];
