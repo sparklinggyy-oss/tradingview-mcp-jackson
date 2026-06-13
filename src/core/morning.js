@@ -146,6 +146,20 @@ function aiVpSnapshotSignature(snapshot) {
   ].join("|");
 }
 
+function matchesExpectedSymbol(actualSymbol, expectedSymbol) {
+  const actual = String(actualSymbol || "");
+  const expected = String(expectedSymbol || "");
+  if (!actual || !expected) return false;
+
+  const actualTicker = actual.split(":").pop().toUpperCase();
+  const expectedTicker = expected.split(":").pop().toUpperCase();
+  return (
+    actual.toUpperCase().includes(expected.toUpperCase()) ||
+    actualTicker === expectedTicker ||
+    actual.toUpperCase().endsWith(`:${expectedTicker}`)
+  );
+}
+
 async function waitForStableStudyValues(timeoutMs = 15000) {
   const start = Date.now();
   let lastSignature = null;
@@ -191,12 +205,27 @@ async function readAiVpStudySnapshot() {
   }
 }
 
-async function waitForFreshAiVpSnapshot(previousSignature = "", timeoutMs = 20000) {
+async function waitForFreshAiVpSnapshot(expectedSymbol, previousSignature = "", timeoutMs = 20000, paneIndex = 0) {
   const start = Date.now();
   let lastSignature = null;
   let stableCount = 0;
 
   while (Date.now() - start < timeoutMs) {
+    let state = null;
+    try {
+      state = await pane.getState({ index: paneIndex });
+    } catch (_) {
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
+    if (!matchesExpectedSymbol(state?.symbol, expectedSymbol)) {
+      stableCount = 0;
+      lastSignature = null;
+      await new Promise((r) => setTimeout(r, 350));
+      continue;
+    }
+
     const snapshot = await readAiVpStudySnapshot();
     const signature = aiVpSnapshotSignature(snapshot);
     if (!snapshot || !signature) {
@@ -575,7 +604,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           );
         }
 
-        const stableAiVp = await waitForFreshAiVpSnapshot(lastAiVpSignature, 25000);
+        const stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 25000, 0);
 
         if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
