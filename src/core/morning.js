@@ -511,10 +511,11 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
 
     const results = [];
     let lastAiVpSignature = "";
+    const maxSymbolAttempts = Math.max(Number(watchlist.length) || 0, 1);
 
     for (let idx = 0; idx < watchlist.length; idx += 1) {
-    const symbol = watchlist[idx];
-    try {
+      const symbol = watchlist[idx];
+      try {
         await assertAiVpWorkspace();
         let ready = false;
         let normalizedSymbol = null;
@@ -522,7 +523,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
         let symbolMatched = false;
         let lastLoadedSymbol = null;
 
-        for (let attempt = 0; attempt < 8; attempt += 1) {
+        for (let attempt = 0; attempt < maxSymbolAttempts; attempt += 1) {
           try {
             await pane.focus({ index: 0 });
             await pane.setSymbol({ index: 0, symbol });
@@ -560,11 +561,10 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
             break;
           }
 
-          if (attempt < 7) {
+          if (attempt < maxSymbolAttempts - 1) {
             console.warn(
-              `Chart symbol mismatch after load on ${symbol} (attempt ${attempt + 1}/8): expected ${symbol}, got ${normalizedSymbol}; retrying`,
+              `Chart symbol mismatch after load on ${symbol} (attempt ${attempt + 1}/${maxSymbolAttempts}): expected ${symbol}, got ${normalizedSymbol}; retrying`,
             );
-            await new Promise((r) => setTimeout(r, 3000));
             continue;
           }
         }
