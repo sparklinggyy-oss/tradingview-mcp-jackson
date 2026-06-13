@@ -117,6 +117,7 @@ function applyAiVpOverrides(brief, overrideMap) {
   const symbols_scanned = brief.symbols_scanned.map((item) => {
     const override = overrideMap[item.symbol];
     if (!override) return item;
+    if (item?.ai_vp?.levels && item?.ai_vp?.values) return item;
     return {
       ...item,
       ai_vp: override,
