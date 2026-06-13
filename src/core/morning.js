@@ -710,7 +710,16 @@ async function runMorningBriefImpl({
 
         let stableAiVp = null;
         if (snapshot_read_mode === "strict") {
-          stableAiVp = await waitForPrimaryAiVpSnapshot(symbol, 60000, 0);
+          try {
+            const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
+            if (aiStudyId) {
+              stableAiVp = await waitForFreshAiVpSnapshotById(aiStudyId, lastAiVpSignature, 20000);
+            }
+          } catch (_) {}
+
+          if (!stableAiVp) {
+            stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 40000, 0);
+          }
         } else {
           try {
             const aiStudyId = await waitForPrimaryAiVpStudyReady(symbol, 40000, 0);
