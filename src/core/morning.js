@@ -610,6 +610,10 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
         } catch (_) {}
 
         if (!stableAiVp) {
+          stableAiVp = await waitForFreshAiVpSnapshot(symbol, lastAiVpSignature, 25000, 0);
+        }
+
+        if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
         }
         lastAiVpSignature = aiVpSnapshotSignature(stableAiVp);
