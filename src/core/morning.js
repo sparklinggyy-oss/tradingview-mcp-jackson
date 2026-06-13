@@ -510,6 +510,7 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
     } catch (_) {}
 
     const results = [];
+    let lastAiVpSignature = "";
 
     for (let idx = 0; idx < watchlist.length; idx += 1) {
     const symbol = watchlist[idx];
@@ -574,11 +575,12 @@ export async function runBrief({ rules_path, symbol_switch_delay_ms } = {}) {
           );
         }
 
-        const stableAiVp = buildAiVpSnapshotFromStudyValues(await waitForStableStudyValues(25000));
+        const stableAiVp = await waitForFreshAiVpSnapshot(lastAiVpSignature, 25000);
 
         if (!stableAiVp) {
           throw new Error(`AI VP snapshot unavailable for ${symbol} after live study read`);
         }
+        lastAiVpSignature = aiVpSnapshotSignature(stableAiVp);
 
         if (process.env.DEBUG_AI_VP === "1" && String(symbol).includes("BTCUSDT")) {
           try {
